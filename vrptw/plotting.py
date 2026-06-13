@@ -86,9 +86,13 @@ def plot_routes(sol: Solution, path: str | None = None,
 
 
 def plot_schedule(sol: Solution, path: str | None = None,
-                  lang: str = "vi") -> plt.Figure:
-    """Biểu đồ Gantt / Gantt chart: TW [a_i, b_i] và thời điểm phục vụ thực tế."""
+                  lang: str = "vi", time_fmt=None) -> plt.Figure:
+    """Biểu đồ Gantt / Gantt chart: TW [a_i, b_i] và thời điểm phục vụ thực tế.
+
+    time_fmt: hàm tùy chọn (phút → chuỗi) để hiện nhãn dạng giờ đồng hồ.
+    """
     lbl = LABELS.get(lang, LABELS["vi"])
+    fmt = time_fmt or (lambda v: f"{v:.0f}")
     inst = sol.instance
     fig, ax = plt.subplots(figsize=(11, 0.5 * inst.n_customers + 2.5))
 
@@ -109,13 +113,16 @@ def plot_schedule(sol: Solution, path: str | None = None,
         # Thời gian phục vụ thực tế / actual service time
         ax.barh(row, max(inst.service_times[c], 1), left=t_start, height=0.55,
                 color=color, edgecolor="black", linewidth=0.8)
-        ax.annotate(f"t={t_start:.0f}", (t_start, row), xytext=(2, 12),
+        ax.annotate(fmt(t_start), (t_start, row), xytext=(2, 12),
                     textcoords="offset points", fontsize=7.5)
 
     ax.set_yticks(range(len(customers)))
     ax.set_yticklabels([f"{lbl['cust']} {c} ({lbl['veh']} {served_by[c][0] + 1})"
                         for c in customers], fontsize=9)
     ax.set_xlabel(lbl["time"])
+    if time_fmt is not None:
+        from matplotlib.ticker import FuncFormatter
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _pos: fmt(x)))
     ax.set_title(lbl["gantt_title"], fontsize=12, fontweight="bold")
     ax.grid(True, axis="x", linestyle="--", alpha=0.5)
     fig.tight_layout()

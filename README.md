@@ -9,6 +9,7 @@ Giải tự động bài toán **Vehicle Routing Problem with Time Windows (VRPT
 ## Tính năng / Features
 
 - **🖥️ Web app song ngữ Việt–Anh / bilingual VI–EN web app** (Streamlit): người dùng tự nhập/sửa dữ liệu trên bảng, upload CSV hoặc sinh ngẫu nhiên, bấm một nút để nhận lời giải tốt nhất + biểu đồ + file tải về / users enter or edit data in a table, upload CSV or generate random instances, then get the best solution, charts and downloadable results in one click
+- **🕐 Nhập giờ đồng hồ HH:MM / clock-time input**: đặt giờ bắt đầu ca rồi nhập giờ sẵn sàng/hạn chót theo đồng hồ (08:00, 5:30 PM…), app tự quy đổi sang phút; kết quả, Gantt và Excel hiện lại theo giờ đồng hồ / set a shift start, enter ready/due as clock times, app converts to minutes and shows results back as clock
 - **Hai solver / two solvers**
   - `ortools` — Google OR-Tools Routing (heuristic, giải nhanh hàng trăm khách hàng / fast, scales to hundreds of customers)
   - `milp` — MILP exact bằng PuLP + CBC, cài đặt **đúng theo mô hình toán (1)–(11)** với tuyến tính hóa Big-M và loại cung không khả thi (arc pruning) / exact MILP implementing the textbook formulation

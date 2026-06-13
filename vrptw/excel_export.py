@@ -23,10 +23,14 @@ def _autofit(ws) -> None:
 
 
 def solution_to_excel(sol: Solution, cost_rows: list[dict], totals: dict,
-                      params: CostParams) -> bytes:
-    """Tạo file .xlsx (bytes) — dùng được cho st.download_button hoặc ghi file."""
+                      params: CostParams, time_fmt=None) -> bytes:
+    """Tạo file .xlsx (bytes) — dùng được cho st.download_button hoặc ghi file.
+
+    time_fmt: hàm tùy chọn (phút → chuỗi) để thêm cột giờ đồng hồ.
+    """
     inst = sol.instance
     cur = params.currency
+    clock = time_fmt is not None
 
     # ---- Sheet 1: Summary ---------------------------------------------------
     summary = pd.DataFrame([
@@ -86,7 +90,7 @@ def solution_to_excel(sol: Solution, cost_rows: list[dict], totals: dict,
         for idx, node in enumerate(r.nodes):
             x, y = inst.locations[node]
             a, b = inst.time_windows[node]
-            sched_rows.append({
+            row = {
                 "Vehicle": r.vehicle + 1, "Stop #": idx,
                 "Node": "Depot" if node == inst.depot else node,
                 "X": x, "Y": y,
@@ -94,7 +98,12 @@ def solution_to_excel(sol: Solution, cost_rows: list[dict], totals: dict,
                 "TW ready": a, "TW due": b,
                 "Service start": round(r.start_times[idx], 1),
                 "Service time": inst.service_times[node],
-            })
+            }
+            if clock:
+                row["TW ready (clock)"] = time_fmt(a)
+                row["TW due (clock)"] = time_fmt(b)
+                row["Service start (clock)"] = time_fmt(r.start_times[idx])
+            sched_rows.append(row)
     schedule = pd.DataFrame(sched_rows)
 
     # ---- Sheet 4: Input data ----------------------------------------------------

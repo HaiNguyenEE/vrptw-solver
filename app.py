@@ -17,6 +17,7 @@ import streamlit as st
 from vrptw import VRPTWInstance, plotting, solver_milp, solver_ortools
 from vrptw.costing import CostParams, route_cost_breakdown
 from vrptw.excel_export import solution_to_excel
+from vrptw.timeutil import clock_to_minutes, make_time_formatter, minutes_to_clock
 
 # ===========================================================================
 # Song ngữ / Translations
@@ -32,6 +33,11 @@ T = {
         "vehicles": "Số xe",
         "capacity": "Sức chứa mỗi xe",
         "time_limit": "Giới hạn thời gian giải (giây)",
+        "time_mode": "Định dạng thời gian",
+        "time_mode_clock": "Giờ đồng hồ (HH:MM)",
+        "time_mode_min": "Số phút",
+        "time_mode_help": "Chọn 'Giờ đồng hồ' để nhập 08:00, 17:30… cho dễ — app tự quy đổi sang phút.",
+        "shift_start": "Giờ bắt đầu ca (mốc 0)",
         "data": "📋 Dữ liệu bài toán",
         "data_help": "Hàng đầu tiên (node 0) là **depot** (kho). Mỗi hàng sau là một khách hàng. Thêm/xóa hàng trực tiếp trong bảng. Xem mục **📖 Giải thích các cột** ngay dưới để hiểu rõ từng tham số.",
         "cols_guide": "📖 Giải thích các cột dữ liệu",
@@ -112,6 +118,11 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "vehicles": "Number of vehicles",
         "capacity": "Capacity per vehicle",
         "time_limit": "Solver time limit (seconds)",
+        "time_mode": "Time format",
+        "time_mode_clock": "Clock time (HH:MM)",
+        "time_mode_min": "Minutes",
+        "time_mode_help": "Pick 'Clock time' to enter 08:00, 5:30 PM… for convenience — the app converts to minutes for you.",
+        "shift_start": "Shift start time (the 0 mark)",
         "data": "📋 Problem data",
         "data_help": "The first row (node 0) is the **depot**. Each following row is a customer. Add/remove rows directly in the table. See **📖 Column reference** below to understand each parameter.",
         "cols_guide": "📖 Column reference (what each field means)",
@@ -233,6 +244,22 @@ num_vehicles = st.sidebar.number_input(t["vehicles"], 1, 50, 3, key="vehicles")
 capacity = st.sidebar.number_input(t["capacity"], 1, 100000, 10, key="capacity")
 time_limit = st.sidebar.slider(t["time_limit"], 1, 300, 10, key="time_limit")
 
+# ---- Chế độ thời gian / time format ----------------------------------------
+time_mode_label = st.sidebar.radio(
+    t["time_mode"], [t["time_mode_clock"], t["time_mode_min"]],
+    help=t["time_mode_help"], key="time_mode")
+clock_mode = time_mode_label == t["time_mode_clock"]
+if clock_mode:
+    shift_start_str = st.sidebar.text_input(t["shift_start"], "08:00",
+                                            key="shift_start")
+    try:
+        shift_start_min = clock_to_minutes(shift_start_str)
+    except Exception:
+        shift_start_min = 8 * 60
+else:
+    shift_start_min = 0.0
+time_fmt = make_time_formatter(clock_mode, shift_start_min)
+
 # ---- Sidebar: chi phí / cost parameters ------------------------------------
 with st.sidebar.expander(t["costs"], expanded=False):
     st.caption(t["costs_help"])
@@ -292,8 +319,32 @@ with c3:
     if uploaded is not None:
         st.session_state.df = pd.read_csv(uploaded)[COLS]
 
-edited_df = st.data_editor(st.session_state.df, num_rows="dynamic",
-                           width="stretch", hide_index=True)
+# Ở chế độ giờ đồng hồ: hiển thị ready_time/due_time dạng HH:MM cho dễ nhập.
+# Dữ liệu gốc luôn lưu theo phút-kể-từ-đầu-ca; chỉ đổi cách hiển thị.
+base_df = st.session_state.df
+if clock_mode:
+    disp = base_df.copy()
+    disp["ready_time"] = disp["ready_time"].apply(
+        lambda v: minutes_to_clock(shift_start_min + float(v)))
+    disp["due_time"] = disp["due_time"].apply(
+        lambda v: minutes_to_clock(shift_start_min + float(v)))
+    disp = disp.rename(columns={"ready_time": "ready (HH:MM)",
+                                "due_time": "due (HH:MM)",
+                                "service_time": "service (min)"})
+    edited_disp = st.data_editor(disp, num_rows="dynamic",
+                                 width="stretch", hide_index=True)
+    # Quy đổi ngược về phút-kể-từ-đầu-ca
+    edited_df = edited_disp.rename(columns={"ready (HH:MM)": "ready_time",
+                                            "due (HH:MM)": "due_time",
+                                            "service (min)": "service_time"})
+
+    def _to_min(v):
+        return clock_to_minutes(v) - shift_start_min
+    edited_df["ready_time"] = edited_df["ready_time"].apply(_to_min)
+    edited_df["due_time"] = edited_df["due_time"].apply(_to_min)
+else:
+    edited_df = st.data_editor(base_df, num_rows="dynamic",
+                               width="stretch", hide_index=True)
 
 # ---- Giải / solve -----------------------------------------------------------
 if st.button(t["solve"], type="primary", width="stretch"):
@@ -340,7 +391,8 @@ if st.button(t["solve"], type="primary", width="stretch"):
     with tab1:
         st.pyplot(plotting.plot_routes(sol, lang=lang))
     with tab2:
-        st.pyplot(plotting.plot_schedule(sol, lang=lang))
+        st.pyplot(plotting.plot_schedule(
+            sol, lang=lang, time_fmt=time_fmt if clock_mode else None))
     with tab_cost:
         st.subheader(t["cost_table"])
         cur = cost_params.currency
@@ -368,7 +420,7 @@ if st.button(t["solve"], type="primary", width="stretch"):
             rows.append({
                 t["col_vehicle"]: r.vehicle + 1,
                 t["col_route"]: " → ".join(map(str, r.nodes)),
-                t["col_times"]: ", ".join(f"{x:.0f}" for x in r.start_times),
+                t["col_times"]: ", ".join(time_fmt(x) for x in r.start_times),
                 t["col_load"]: f"{r.load}/{inst.vehicle_capacity}",
                 t["col_dist"]: round(r.distance, 2),
             })
@@ -392,7 +444,8 @@ if st.button(t["solve"], type="primary", width="stretch"):
     csv_buf = io.StringIO()
     pd.DataFrame(schedule_rows).to_csv(csv_buf, index=False)
 
-    xlsx_bytes = solution_to_excel(sol, cost_rows, cost_totals, cost_params)
+    xlsx_bytes = solution_to_excel(sol, cost_rows, cost_totals, cost_params,
+                                   time_fmt=time_fmt if clock_mode else None)
 
     d1, d2, d3 = st.columns(3)
     d1.download_button(t["download_xlsx"], xlsx_bytes,

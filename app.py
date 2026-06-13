@@ -18,7 +18,7 @@ from vrptw import VRPTWInstance, plotting, solver_milp, solver_ortools
 from vrptw.costing import CostParams, route_cost_breakdown
 from vrptw.excel_export import solution_to_excel
 from vrptw.timeutil import clock_to_minutes, make_time_formatter, minutes_to_clock
-from vrptw import geocode
+from vrptw import geocode, routing_osrm
 
 # ===========================================================================
 # Song ngữ / Translations
@@ -53,6 +53,9 @@ T = {
         "depot_set": "✅ Đặt làm kho",
         "depot_current": "Kho hiện tại",
         "geocoding": "Đang tìm tọa độ các địa chỉ…",
+        "routing": "Đang tính quãng đường lái xe theo đường thật (OSRM)…",
+        "routing_ok": "✅ Khoảng cách & thời gian tính theo đường thật (OSRM / OpenStreetMap).",
+        "routing_fail": "⚠️ Không kết nối được OSRM — tạm dùng khoảng cách chim bay × hệ số đường và tốc độ trung bình.",
         "geo_err": "Không tìm được tọa độ cho: ",
         "addr_col": "Địa chỉ",
         "no_depot": "Hãy đặt địa chỉ kho (depot) trước khi giải.",
@@ -161,6 +164,9 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "depot_set": "✅ Set as depot",
         "depot_current": "Current depot",
         "geocoding": "Finding coordinates for addresses…",
+        "routing": "Computing real driving distances (OSRM)…",
+        "routing_ok": "✅ Distances & times use the real road network (OSRM / OpenStreetMap).",
+        "routing_fail": "⚠️ Could not reach OSRM — falling back to straight-line × road factor and average speed.",
         "geo_err": "Could not geocode: ",
         "addr_col": "Address",
         "no_depot": "Set a depot address before solving.",
@@ -273,12 +279,16 @@ ADDR_COLS = ["address", "demand", "ready_time", "due_time", "service_time"]
 
 
 def sample_addr_df() -> pd.DataFrame:
-    """Vài địa chỉ mẫu (Long Beach, CA) để thử nhanh chế độ địa chỉ."""
+    """Vài địa chỉ phố thật (Long Beach, CA) để thử nhanh chế độ địa chỉ.
+
+    Đây chỉ là ví dụ — hãy dùng ô '🔎 Tìm & thêm địa chỉ' để nhập địa chỉ thật
+    của bạn (có gợi ý tự động để tránh gõ sai).
+    """
     rows = [
-        ["Aquarium of the Pacific, Long Beach, CA", 2, 0, 120, 10],
-        ["California State University Long Beach, CA", 3, 0, 180, 10],
-        ["Long Beach Airport, CA", 4, 30, 200, 15],
-        ["The Pike Outlets, Long Beach, CA", 2, 20, 160, 10],
+        ["100 Aquarium Way, Long Beach, CA 90802", 2, 0, 120, 10],
+        ["1250 Bellflower Blvd, Long Beach, CA 90840", 3, 0, 180, 10],
+        ["4100 Donald Douglas Dr, Long Beach, CA 90808", 4, 30, 200, 15],
+        ["95 S Pine Ave, Long Beach, CA 90802", 2, 20, 160, 10],
     ]
     return pd.DataFrame(rows, columns=ADDR_COLS)
 
@@ -382,6 +392,11 @@ def cached_suggest(query: str, country):
 @st.cache_data(show_spinner=False)
 def cached_geocode_many(addr_tuple, country):
     return geocode.geocode_many(list(addr_tuple), country)
+
+
+@st.cache_data(show_spinner=False)
+def cached_osrm_table(coords_tuple, unit):
+    return routing_osrm.table([tuple(c) for c in coords_tuple], unit=unit)
 
 
 def _clock_editor(df):
@@ -521,6 +536,14 @@ if st.button(t["solve"], type="primary", width="stretch"):
                 coord_mode="geo", avg_speed=float(avg_speed),
                 distance_unit=unit_choice, road_factor=float(road_factor),
                 addresses=all_addr)
+            # Khoảng cách & thời gian theo ĐƯỜNG THẬT qua OSRM (fallback: chim bay)
+            try:
+                with st.spinner(t["routing"]):
+                    dmat, tmat = cached_osrm_table(tuple(coords), unit_choice)
+                inst.set_distance_time(dmat, tmat, unit=unit_choice)
+                st.caption(t["routing_ok"])
+            except Exception:
+                st.warning(t["routing_fail"])
         total, cap = sum(inst.demands), int(num_vehicles) * int(capacity)
         if total > cap:
             st.error(t["err_capacity"].format(total=total, cap=cap))

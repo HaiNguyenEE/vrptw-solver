@@ -92,6 +92,14 @@ class VRPTWInstance:
                 self._time = [row[:] for row in dist]
         return self._time
 
+    def set_distance_time(self, dist: list[list[float]],
+                          time: list[list[float]], unit: str | None = None) -> None:
+        """Gán ma trận khoảng cách & thời gian đã tính sẵn (vd từ OSRM đường thật)."""
+        self._dist = dist
+        self._time = time
+        if unit:
+            self.distance_unit = unit
+
     def validate(self) -> None:
         n = len(self.locations)
         assert len(self.demands) == n == len(self.time_windows) == len(self.service_times), \

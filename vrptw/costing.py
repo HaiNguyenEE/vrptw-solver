@@ -41,7 +41,7 @@ def route_cost_breakdown(sol: Solution, params: CostParams
     thời điểm phục vụ khách đầu/cuối + thời gian di chuyển (phút).
     """
     inst = sol.instance
-    dist = inst.distance_matrix
+    tmat = inst.time_matrix
     rows: list[dict] = []
 
     for r in sol.routes:
@@ -49,9 +49,9 @@ def route_cost_breakdown(sol: Solution, params: CostParams
             continue
         first, last = r.nodes[1], r.nodes[-2]
         # Rời depot muộn nhất có thể để đến khách đầu tiên đúng giờ (không chờ)
-        depart = r.start_times[1] - dist[inst.depot][first]
+        depart = r.start_times[1] - tmat[inst.depot][first]
         finish = (r.start_times[-2] + inst.service_times[last]
-                  + dist[last][inst.depot])
+                  + tmat[last][inst.depot])
         duration = max(0.0, finish - depart)  # phút
 
         fuel = r.distance * params.fuel_per_unit

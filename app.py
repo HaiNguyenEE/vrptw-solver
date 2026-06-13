@@ -18,6 +18,7 @@ from vrptw import VRPTWInstance, plotting, solver_milp, solver_ortools
 from vrptw.costing import CostParams, route_cost_breakdown
 from vrptw.excel_export import solution_to_excel
 from vrptw.timeutil import clock_to_minutes, make_time_formatter, minutes_to_clock
+from vrptw import geocode
 
 # ===========================================================================
 # Song ngữ / Translations
@@ -33,6 +34,29 @@ T = {
         "vehicles": "Số xe",
         "capacity": "Sức chứa mỗi xe",
         "time_limit": "Giới hạn thời gian giải (giây)",
+        "loc_mode": "Cách nhập vị trí",
+        "loc_xy": "Tọa độ X, Y",
+        "loc_addr": "Địa chỉ thật",
+        "loc_help": "Chọn 'Địa chỉ thật' để nhập địa chỉ giao hàng — app sẽ tự tìm tọa độ (OpenStreetMap) và tính khoảng cách.",
+        "avg_speed": "Tốc độ trung bình",
+        "dist_unit": "Đơn vị khoảng cách",
+        "road_factor": "Hệ số đường thực (so với chim bay)",
+        "country": "Giới hạn quốc gia (mã 2 chữ, để trống nếu không)",
+        "depot_addr": "📍 Địa chỉ kho (depot)",
+        "addr_search": "🔎 Tìm & thêm địa chỉ giao hàng",
+        "addr_query": "Gõ địa chỉ để tìm gợi ý",
+        "addr_find": "🔎 Tìm",
+        "addr_pick": "Chọn địa chỉ đúng",
+        "addr_add": "➕ Thêm vào bảng",
+        "addr_none": "Không tìm thấy gợi ý. Thử gõ chi tiết hơn (số nhà, đường, thành phố).",
+        "depot_find": "🔎 Tìm kho",
+        "depot_set": "✅ Đặt làm kho",
+        "depot_current": "Kho hiện tại",
+        "geocoding": "Đang tìm tọa độ các địa chỉ…",
+        "geo_err": "Không tìm được tọa độ cho: ",
+        "addr_col": "Địa chỉ",
+        "no_depot": "Hãy đặt địa chỉ kho (depot) trước khi giải.",
+        "no_customers": "Hãy thêm ít nhất một địa chỉ giao hàng.",
         "time_mode": "Định dạng thời gian",
         "time_mode_clock": "Giờ đồng hồ (HH:MM)",
         "time_mode_min": "Số phút",
@@ -118,6 +142,29 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "vehicles": "Number of vehicles",
         "capacity": "Capacity per vehicle",
         "time_limit": "Solver time limit (seconds)",
+        "loc_mode": "Location input",
+        "loc_xy": "X, Y coordinates",
+        "loc_addr": "Real addresses",
+        "loc_help": "Pick 'Real addresses' to type delivery addresses — the app finds coordinates (OpenStreetMap) and computes distances.",
+        "avg_speed": "Average speed",
+        "dist_unit": "Distance unit",
+        "road_factor": "Road factor (vs straight-line)",
+        "country": "Country filter (2-letter code, blank = none)",
+        "depot_addr": "📍 Depot (warehouse) address",
+        "addr_search": "🔎 Find & add a delivery address",
+        "addr_query": "Type an address to get suggestions",
+        "addr_find": "🔎 Search",
+        "addr_pick": "Pick the correct address",
+        "addr_add": "➕ Add to table",
+        "addr_none": "No suggestions found. Try a more detailed address (number, street, city).",
+        "depot_find": "🔎 Search depot",
+        "depot_set": "✅ Set as depot",
+        "depot_current": "Current depot",
+        "geocoding": "Finding coordinates for addresses…",
+        "geo_err": "Could not geocode: ",
+        "addr_col": "Address",
+        "no_depot": "Set a depot address before solving.",
+        "no_customers": "Add at least one delivery address.",
         "time_mode": "Time format",
         "time_mode_clock": "Clock time (HH:MM)",
         "time_mode_min": "Minutes",
@@ -222,6 +269,20 @@ def df_to_instance(df: pd.DataFrame, num_vehicles: int,
     return inst
 
 
+ADDR_COLS = ["address", "demand", "ready_time", "due_time", "service_time"]
+
+
+def sample_addr_df() -> pd.DataFrame:
+    """Vài địa chỉ mẫu (Long Beach, CA) để thử nhanh chế độ địa chỉ."""
+    rows = [
+        ["Aquarium of the Pacific, Long Beach, CA", 2, 0, 120, 10],
+        ["California State University Long Beach, CA", 3, 0, 180, 10],
+        ["Long Beach Airport, CA", 4, 30, 200, 15],
+        ["The Pike Outlets, Long Beach, CA", 2, 20, 160, 10],
+    ]
+    return pd.DataFrame(rows, columns=ADDR_COLS)
+
+
 # ===========================================================================
 # Giao diện / UI
 # ===========================================================================
@@ -243,6 +304,24 @@ solver_name = st.sidebar.selectbox(
 num_vehicles = st.sidebar.number_input(t["vehicles"], 1, 50, 3, key="vehicles")
 capacity = st.sidebar.number_input(t["capacity"], 1, 100000, 10, key="capacity")
 time_limit = st.sidebar.slider(t["time_limit"], 1, 300, 10, key="time_limit")
+
+# ---- Chế độ vị trí / location mode -----------------------------------------
+loc_mode_label = st.sidebar.radio(
+    t["loc_mode"], [t["loc_xy"], t["loc_addr"]], help=t["loc_help"],
+    key="loc_mode")
+addr_mode = loc_mode_label == t["loc_addr"]
+if addr_mode:
+    unit_choice = st.sidebar.selectbox(t["dist_unit"], ["mi", "km"], key="dist_unit")
+    default_speed = 30.0 if unit_choice == "mi" else 50.0
+    avg_speed = st.sidebar.number_input(
+        f"{t['avg_speed']} ({unit_choice}/h)", 1.0, 200.0, default_speed,
+        step=1.0, key="avg_speed")
+    road_factor = st.sidebar.number_input(t["road_factor"], 1.0, 2.0, 1.3,
+                                          step=0.05, key="road_factor")
+    country = st.sidebar.text_input(t["country"], "", max_chars=2,
+                                    key="country").strip().lower() or None
+else:
+    unit_choice, avg_speed, road_factor, country = "unit", 1.0, 1.0, None
 
 # ---- Chế độ thời gian / time format ----------------------------------------
 time_mode_label = st.sidebar.radio(
@@ -294,62 +373,154 @@ cost_params = CostParams(
 with st.sidebar.expander(t["guide"]):
     st.markdown(t["guide_body"])
 
+# Cache geocoding để không gọi mạng lại mỗi lần rerun
+@st.cache_data(show_spinner=False)
+def cached_suggest(query: str, country):
+    return geocode.suggest(query, 6, country)
+
+
+@st.cache_data(show_spinner=False)
+def cached_geocode_many(addr_tuple, country):
+    return geocode.geocode_many(list(addr_tuple), country)
+
+
+def _clock_editor(df):
+    """Hiển thị bảng với ready/due theo HH:MM (nếu clock_mode); trả df đã quy đổi phút."""
+    if clock_mode:
+        disp = df.copy()
+        disp["ready_time"] = disp["ready_time"].apply(
+            lambda v: minutes_to_clock(shift_start_min + float(v)))
+        disp["due_time"] = disp["due_time"].apply(
+            lambda v: minutes_to_clock(shift_start_min + float(v)))
+        disp = disp.rename(columns={"ready_time": "ready (HH:MM)",
+                                    "due_time": "due (HH:MM)",
+                                    "service_time": "service (min)"})
+        ed = st.data_editor(disp, num_rows="dynamic", width="stretch",
+                            hide_index=True)
+        ed = ed.rename(columns={"ready (HH:MM)": "ready_time",
+                                "due (HH:MM)": "due_time",
+                                "service (min)": "service_time"})
+        ed["ready_time"] = ed["ready_time"].apply(
+            lambda v: clock_to_minutes(v) - shift_start_min)
+        ed["due_time"] = ed["due_time"].apply(
+            lambda v: clock_to_minutes(v) - shift_start_min)
+        return ed
+    return st.data_editor(df, num_rows="dynamic", width="stretch",
+                          hide_index=True)
+
+
 # ---- Dữ liệu / data ---------------------------------------------------------
 st.header(t["data"])
-st.markdown(t["data_help"])
+edited_df = None          # chế độ X/Y
+edited_addr_df = None     # chế độ địa chỉ
 
-with st.expander(t["cols_guide"]):
-    st.markdown(t["cols_guide_body"])
+if not addr_mode:
+    # ===================== CHẾ ĐỘ TỌA ĐỘ X/Y =====================
+    st.markdown(t["data_help"])
+    with st.expander(t["cols_guide"]):
+        st.markdown(t["cols_guide_body"])
 
-if "df" not in st.session_state:
-    st.session_state.df = instance_to_df(VRPTWInstance.sample())
-
-c1, c2, c3 = st.columns([1, 1, 2])
-with c1:
-    if st.button(t["load_sample"], width="stretch"):
+    if "df" not in st.session_state:
         st.session_state.df = instance_to_df(VRPTWInstance.sample())
-with c2:
-    n_rand = st.number_input(t["n_random"], 3, 60, 12, label_visibility="collapsed", key="n_rand")
-    if st.button(t["gen_random"], width="stretch"):
-        st.session_state.df = instance_to_df(VRPTWInstance.random(
-            n_customers=int(n_rand), num_vehicles=int(num_vehicles),
-            vehicle_capacity=int(capacity)))
-with c3:
-    uploaded = st.file_uploader(t["upload"], type="csv", label_visibility="collapsed")
-    if uploaded is not None:
-        st.session_state.df = pd.read_csv(uploaded)[COLS]
 
-# Ở chế độ giờ đồng hồ: hiển thị ready_time/due_time dạng HH:MM cho dễ nhập.
-# Dữ liệu gốc luôn lưu theo phút-kể-từ-đầu-ca; chỉ đổi cách hiển thị.
-base_df = st.session_state.df
-if clock_mode:
-    disp = base_df.copy()
-    disp["ready_time"] = disp["ready_time"].apply(
-        lambda v: minutes_to_clock(shift_start_min + float(v)))
-    disp["due_time"] = disp["due_time"].apply(
-        lambda v: minutes_to_clock(shift_start_min + float(v)))
-    disp = disp.rename(columns={"ready_time": "ready (HH:MM)",
-                                "due_time": "due (HH:MM)",
-                                "service_time": "service (min)"})
-    edited_disp = st.data_editor(disp, num_rows="dynamic",
-                                 width="stretch", hide_index=True)
-    # Quy đổi ngược về phút-kể-từ-đầu-ca
-    edited_df = edited_disp.rename(columns={"ready (HH:MM)": "ready_time",
-                                            "due (HH:MM)": "due_time",
-                                            "service (min)": "service_time"})
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        if st.button(t["load_sample"], width="stretch"):
+            st.session_state.df = instance_to_df(VRPTWInstance.sample())
+    with c2:
+        n_rand = st.number_input(t["n_random"], 3, 60, 12,
+                                 label_visibility="collapsed", key="n_rand")
+        if st.button(t["gen_random"], width="stretch"):
+            st.session_state.df = instance_to_df(VRPTWInstance.random(
+                n_customers=int(n_rand), num_vehicles=int(num_vehicles),
+                vehicle_capacity=int(capacity)))
+    with c3:
+        uploaded = st.file_uploader(t["upload"], type="csv",
+                                    label_visibility="collapsed")
+        if uploaded is not None:
+            st.session_state.df = pd.read_csv(uploaded)[COLS]
 
-    def _to_min(v):
-        return clock_to_minutes(v) - shift_start_min
-    edited_df["ready_time"] = edited_df["ready_time"].apply(_to_min)
-    edited_df["due_time"] = edited_df["due_time"].apply(_to_min)
+    edited_df = _clock_editor(st.session_state.df)
+
 else:
-    edited_df = st.data_editor(base_df, num_rows="dynamic",
-                               width="stretch", hide_index=True)
+    # ===================== CHẾ ĐỘ ĐỊA CHỈ THẬT =====================
+    if "addr_df" not in st.session_state:
+        st.session_state.addr_df = sample_addr_df()
+    st.session_state.setdefault("depot_addr", "")
+    st.session_state.setdefault("addr_suggestions", [])
+    st.session_state.setdefault("depot_suggestions", [])
+
+    # --- Địa chỉ kho (depot) ---
+    st.subheader(t["depot_addr"])
+    dq1, dq2 = st.columns([3, 1])
+    depot_query = dq1.text_input(t["addr_query"], key="depot_query",
+                                 label_visibility="collapsed")
+    if dq2.button(t["depot_find"], width="stretch"):
+        st.session_state.depot_suggestions = cached_suggest(depot_query, country)
+    if st.session_state.depot_suggestions:
+        opts = [s["display_name"] for s in st.session_state.depot_suggestions]
+        pick = st.selectbox(t["addr_pick"], opts, key="depot_pick")
+        if st.button(t["depot_set"]):
+            st.session_state.depot_addr = pick
+            st.session_state.depot_suggestions = []
+            st.rerun()
+    if st.session_state.depot_addr:
+        st.success(f"📍 {t['depot_current']}: {st.session_state.depot_addr}")
+
+    # --- Tìm & thêm địa chỉ giao hàng (autocomplete) ---
+    with st.expander(t["addr_search"], expanded=True):
+        aq1, aq2 = st.columns([3, 1])
+        addr_query = aq1.text_input(t["addr_query"], key="addr_query",
+                                    label_visibility="collapsed")
+        if aq2.button(t["addr_find"], width="stretch"):
+            st.session_state.addr_suggestions = cached_suggest(addr_query, country)
+            if not st.session_state.addr_suggestions:
+                st.warning(t["addr_none"])
+        if st.session_state.addr_suggestions:
+            opts = [s["display_name"] for s in st.session_state.addr_suggestions]
+            picked = st.selectbox(t["addr_pick"], opts, key="addr_pick")
+            if st.button(t["addr_add"], type="primary"):
+                big = 1000
+                new = pd.DataFrame(
+                    [[picked, 1, 0, big, 10]], columns=ADDR_COLS)
+                st.session_state.addr_df = pd.concat(
+                    [st.session_state.addr_df, new], ignore_index=True)
+                st.session_state.addr_suggestions = []
+                st.rerun()
+
+    st.markdown(f"**{t['addr_col']}** + demand / ready / due / service:")
+    edited_addr_df = _clock_editor(st.session_state.addr_df)
 
 # ---- Giải / solve -----------------------------------------------------------
 if st.button(t["solve"], type="primary", width="stretch"):
     try:
-        inst = df_to_instance(edited_df, int(num_vehicles), int(capacity))
+        if not addr_mode:
+            inst = df_to_instance(edited_df, int(num_vehicles), int(capacity))
+        else:
+            adf = edited_addr_df.dropna(subset=["address"]).copy()
+            adf = adf[adf["address"].astype(str).str.strip() != ""]
+            if not st.session_state.depot_addr:
+                st.error(t["no_depot"]); st.stop()
+            if len(adf) == 0:
+                st.error(t["no_customers"]); st.stop()
+            all_addr = [st.session_state.depot_addr] + adf["address"].tolist()
+            with st.spinner(t["geocoding"]):
+                coords, errs = cached_geocode_many(tuple(all_addr), country)
+            if errs:
+                st.error(t["geo_err"] + "; ".join(errs)); st.stop()
+            big = 100000
+            inst = VRPTWInstance(
+                name="user_addresses",
+                locations=coords,
+                demands=[0] + [int(v) for v in adf["demand"]],
+                time_windows=([(0, big)]
+                              + [(int(r), int(d)) for r, d in
+                                 zip(adf["ready_time"], adf["due_time"])]),
+                service_times=[0] + [int(v) for v in adf["service_time"]],
+                num_vehicles=int(num_vehicles), vehicle_capacity=int(capacity),
+                coord_mode="geo", avg_speed=float(avg_speed),
+                distance_unit=unit_choice, road_factor=float(road_factor),
+                addresses=all_addr)
         total, cap = sum(inst.demands), int(num_vehicles) * int(capacity)
         if total > cap:
             st.error(t["err_capacity"].format(total=total, cap=cap))
@@ -372,8 +543,9 @@ if st.button(t["solve"], type="primary", width="stretch"):
     cost_rows, cost_totals = route_cost_breakdown(sol, cost_params)
 
     st.markdown(f"**{t['status']}:** {sol.status}")
+    dist_unit = f" {inst.distance_unit}" if addr_mode else ""
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric(t["total_dist"], f"{sol.total_distance:.2f}")
+    m1.metric(t["total_dist"], f"{sol.total_distance:.2f}{dist_unit}")
     m2.metric(t["veh_used"], f"{sol.vehicles_used}/{inst.num_vehicles}")
     m3.metric(t["total_cost"], f"{cost_params.currency}{cost_totals['total']:,.2f}")
     m4.metric(t["runtime"], f"{sol.runtime_s:.2f}s")

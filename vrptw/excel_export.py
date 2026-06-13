@@ -93,12 +93,17 @@ def solution_to_excel(sol: Solution, cost_rows: list[dict], totals: dict,
             row = {
                 "Vehicle": r.vehicle + 1, "Stop #": idx,
                 "Node": "Depot" if node == inst.depot else node,
-                "X": x, "Y": y,
+            }
+            if inst.addresses:
+                row["Address"] = inst.addresses[node]
+            else:
+                row["X"], row["Y"] = x, y
+            row.update({
                 "Demand": inst.demands[node],
                 "TW ready": a, "TW due": b,
                 "Service start": round(r.start_times[idx], 1),
                 "Service time": inst.service_times[node],
-            }
+            })
             if clock:
                 row["TW ready (clock)"] = time_fmt(a)
                 row["TW due (clock)"] = time_fmt(b)

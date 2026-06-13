@@ -39,10 +39,17 @@ def plot_routes(sol: Solution, path: str | None = None,
     """Bản đồ tuyến đường / route map: depot, khách hàng (TW & demand), mũi tên."""
     lbl = LABELS.get(lang, LABELS["vi"])
     inst = sol.instance
+    geo = inst.coord_mode == "geo"
     fig, ax = plt.subplots(figsize=(11, 8))
 
+    def xy(node):
+        """Trả (x, y) để vẽ: geo dùng lon→x, lat→y."""
+        a, b = inst.locations[node]
+        return (b, a) if geo else (a, b)
+
     # Depot & khách hàng / depot & customers
-    for node, (x, y) in enumerate(inst.locations):
+    for node in range(len(inst.locations)):
+        x, y = xy(node)
         if node == inst.depot:
             ax.scatter(x, y, s=320, marker="s", c="#2c5f9e",
                        edgecolors="black", linewidths=1.5, zorder=5, label="Depot")
@@ -60,8 +67,8 @@ def plot_routes(sol: Solution, path: str | None = None,
         if not r.used:
             continue
         color = COLORS[r.vehicle % len(COLORS)]
-        xs = [inst.locations[i][0] for i in r.nodes]
-        ys = [inst.locations[i][1] for i in r.nodes]
+        xs = [xy(i)[0] for i in r.nodes]
+        ys = [xy(i)[1] for i in r.nodes]
         label = (f"{lbl['veh']} {r.vehicle + 1}: " + " → ".join(map(str, r.nodes))
                  + f"  (d={r.distance:.1f})")
         ax.plot(xs, ys, marker="o", linewidth=2.6, color=color, alpha=0.85,
@@ -73,10 +80,12 @@ def plot_routes(sol: Solution, path: str | None = None,
                         arrowprops=dict(arrowstyle="-|>", color=color, lw=2),
                         zorder=4)
 
-    ax.set_title(lbl["routes_title"].format(solver=sol.solver, dist=sol.total_distance),
+    unit = f" {inst.distance_unit}" if geo else ""
+    ax.set_title(lbl["routes_title"].format(solver=sol.solver,
+                                            dist=sol.total_distance) + unit,
                  fontsize=14, fontweight="bold")
-    ax.set_xlabel(lbl["x"])
-    ax.set_ylabel(lbl["y"])
+    ax.set_xlabel("Longitude" if geo else lbl["x"])
+    ax.set_ylabel("Latitude" if geo else lbl["y"])
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend(fontsize=8, loc="best")
     fig.tight_layout()

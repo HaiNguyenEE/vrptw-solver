@@ -7,6 +7,20 @@ import math
 import random
 from dataclasses import dataclass, field
 
+_EARTH_MI = 3958.7613
+_EARTH_KM = 6371.0088
+
+
+def _haversine(p1: tuple[float, float], p2: tuple[float, float],
+               unit: str = "mi") -> float:
+    """Khoảng cách great-circle giữa hai (lat, lon) — dặm hoặc km."""
+    lat1, lon1 = map(math.radians, p1)
+    lat2, lon2 = map(math.radians, p2)
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+    return (_EARTH_KM if unit == "km" else _EARTH_MI) * c
+
 
 @dataclass
 class VRPTWInstance:
@@ -15,15 +29,22 @@ class VRPTWInstance:
     Node 0 luôn là depot. Các node 1..n là khách hàng.
     """
 
-    locations: list[tuple[float, float]]          # tọa độ (x, y) từng node
+    locations: list[tuple[float, float]]          # (x, y) nếu xy; (lat, lon) nếu geo
     demands: list[int]                            # nhu cầu d_i (depot = 0)
-    time_windows: list[tuple[int, int]]           # khung thời gian [a_i, b_i]
-    service_times: list[int]                      # thời gian phục vụ s_i
+    time_windows: list[tuple[int, int]]           # khung thời gian [a_i, b_i] (phút)
+    service_times: list[int]                      # thời gian phục vụ s_i (phút)
     num_vehicles: int = 3                         # số xe |K|
     vehicle_capacity: int = 10                    # sức chứa C
     depot: int = 0
     name: str = "instance"
+    # --- chế độ vị trí / location mode ---
+    coord_mode: str = "xy"                        # "xy" | "geo" (lat/lon)
+    avg_speed: float = 1.0                        # tốc độ TB (đơn vị/giờ); xy = 1
+    distance_unit: str = "unit"                   # "unit" | "mi" | "km"
+    road_factor: float = 1.0                      # hệ số đường thực / chim bay (geo ~1.3)
+    addresses: list[str] | None = None            # địa chỉ để hiển thị (geo)
     _dist: list[list[float]] = field(default=None, repr=False)
+    _time: list[list[float]] = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
     @property
@@ -32,16 +53,44 @@ class VRPTWInstance:
 
     @property
     def distance_matrix(self) -> list[list[float]]:
-        """Ma trận khoảng cách Euclid (đồng thời là thời gian di chuyển t_ij)."""
+        """Ma trận khoảng cách (chi phí c_ij).
+
+        - xy : khoảng cách Euclid
+        - geo: khoảng cách great-circle (haversine) × road_factor, đơn vị dặm/km
+        """
         if self._dist is None:
             n = len(self.locations)
             self._dist = [[0.0] * n for _ in range(n)]
             for i in range(n):
-                xi, yi = self.locations[i]
                 for j in range(n):
-                    xj, yj = self.locations[j]
-                    self._dist[i][j] = math.hypot(xi - xj, yi - yj)
+                    if i == j:
+                        continue
+                    if self.coord_mode == "geo":
+                        self._dist[i][j] = (_haversine(self.locations[i],
+                                                       self.locations[j],
+                                                       self.distance_unit)
+                                            * self.road_factor)
+                    else:
+                        xi, yi = self.locations[i]
+                        xj, yj = self.locations[j]
+                        self._dist[i][j] = math.hypot(xi - xj, yi - yj)
         return self._dist
+
+    @property
+    def time_matrix(self) -> list[list[float]]:
+        """Ma trận thời gian di chuyển t_ij (phút), dùng cho ràng buộc khung giờ.
+
+        - xy : bằng đúng distance_matrix (tốc độ = 1, giữ hành vi cũ)
+        - geo: khoảng cách / tốc độ TB × 60
+        """
+        if self._time is None:
+            dist = self.distance_matrix
+            if self.coord_mode == "geo" and self.avg_speed > 0:
+                self._time = [[d / self.avg_speed * 60.0 for d in row]
+                              for row in dist]
+            else:
+                self._time = [row[:] for row in dist]
+        return self._time
 
     def validate(self) -> None:
         n = len(self.locations)

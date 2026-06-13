@@ -19,9 +19,12 @@ SCALE = 100  # hệ số scale khoảng cách/thời gian sang int
 def solve(inst: VRPTWInstance, time_limit_s: int = 10) -> Solution:
     inst.validate()
     dist = inst.distance_matrix
+    tmat = inst.time_matrix
     n = len(inst.locations)
     d_int = [[round(dist[i][j] * SCALE) for j in range(n)] for i in range(n)]
-    horizon = max(b for _, b in inst.time_windows) * SCALE
+    t_int = [[round(tmat[i][j] * SCALE) for j in range(n)] for i in range(n)]
+    horizon = (max(b for _, b in inst.time_windows)
+               + int(max(max(r) for r in tmat)) + 1) * SCALE
 
     manager = pywrapcp.RoutingIndexManager(n, inst.num_vehicles, inst.depot)
     routing = pywrapcp.RoutingModel(manager)
@@ -44,7 +47,7 @@ def solve(inst: VRPTWInstance, time_limit_s: int = 10) -> Solution:
     # ---- Ràng buộc thời gian (6)-(8) -------------------------------------
     def time_cb(fi: int, ti: int) -> int:
         f, t = manager.IndexToNode(fi), manager.IndexToNode(ti)
-        return d_int[f][t] + inst.service_times[f] * SCALE
+        return t_int[f][t] + inst.service_times[f] * SCALE
 
     time_idx = routing.RegisterTransitCallback(time_cb)
     routing.AddDimension(time_idx, horizon, horizon, False, "Time")

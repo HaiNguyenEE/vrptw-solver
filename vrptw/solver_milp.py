@@ -45,7 +45,9 @@ def solve(inst: VRPTWInstance, time_limit_s: int = 60, verbose: bool = False) ->
     def loc(i: int) -> int:               # ánh xạ node mở rộng -> node gốc
         return inst.depot if i in (start, end) else i
 
-    t = {(i, j): dist[loc(i)][loc(j)] for i in V for j in V}
+    tmat = inst.time_matrix
+    c = {(i, j): dist[loc(i)][loc(j)] for i in V for j in V}   # chi phí/quãng đường
+    t = {(i, j): tmat[loc(i)][loc(j)] for i in V for j in V}   # thời gian di chuyển
     a = {i: inst.time_windows[loc(i)][0] for i in V}
     b = {i: inst.time_windows[loc(i)][1] for i in V}
     s = {i: inst.service_times[loc(i)] for i in V}
@@ -73,8 +75,8 @@ def solve(inst: VRPTWInstance, time_limit_s: int = 60, verbose: bool = False) ->
 
     prob = pulp.LpProblem("VRPTW", pulp.LpMinimize)
 
-    # (1) Mục tiêu: tối thiểu tổng quãng đường
-    prob += pulp.lpSum(t[i, j] * x[i, j, k] for (i, j) in A for k in K)
+    # (1) Mục tiêu: tối thiểu tổng quãng đường (chi phí c_ij)
+    prob += pulp.lpSum(c[i, j] * x[i, j, k] for (i, j) in A for k in K)
 
     # (2) Mỗi khách hàng được phục vụ đúng một lần
     for i in customers:

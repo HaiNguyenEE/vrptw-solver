@@ -47,8 +47,8 @@ class Solution:
         Trả về danh sách lỗi (rỗng nếu lời giải hợp lệ).
         """
         inst, errors = self.instance, []
-        dist = inst.distance_matrix
-        TOL = 0.05  # dung sai do OR-Tools làm tròn khoảng cách (scale x100)
+        dist = inst.time_matrix  # kiểm tra trình tự dùng thời gian di chuyển (phút)
+        TOL = 0.5  # dung sai phút do OR-Tools làm tròn (scale x100)
         visited: list[int] = []
         for r in self.routes:
             if not r.used:

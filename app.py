@@ -492,8 +492,8 @@ else:
     # Đặt sẵn địa chỉ kho mẫu (người dùng có thể đổi bằng ô tìm kho)
     st.session_state.setdefault("depot_addr",
                                 "411 W Ocean Blvd, Long Beach, CA 90802")
-    st.session_state.setdefault("addr_suggestions", [])
-    st.session_state.setdefault("depot_suggestions", [])
+    # Lưu tọa độ đã geocode để KHỎI geocode lại chuỗi đầy đủ (tránh lỗi)
+    st.session_state.setdefault("addr_coords", {})  # {địa chỉ: (lat, lon)}
 
     # --- Địa chỉ kho (depot) — gõ là gợi ý hiện ra ngay ---
     st.subheader(t["depot_addr"])
@@ -501,11 +501,12 @@ else:
     if depot_query and len(depot_query.strip()) >= 4:
         sugg = cached_suggest(depot_query, country)
         if sugg:
-            pick = st.selectbox(t["addr_pick"],
-                                [s["display_name"] for s in sugg],
-                                key="depot_pick")
+            names = [s["display_name"] for s in sugg]
+            pick = st.selectbox(t["addr_pick"], names, key="depot_pick")
             if st.button(t["depot_set"]):
+                chosen = sugg[names.index(pick)]
                 st.session_state.depot_addr = pick
+                st.session_state.addr_coords[pick] = (chosen["lat"], chosen["lon"])
                 st.rerun()
         else:
             st.caption(t["addr_none"])
@@ -518,10 +519,12 @@ else:
         if addr_query and len(addr_query.strip()) >= 4:
             sugg = cached_suggest(addr_query, country)
             if sugg:
-                picked = st.selectbox(t["addr_pick"],
-                                      [s["display_name"] for s in sugg],
-                                      key="addr_pick")
+                names = [s["display_name"] for s in sugg]
+                picked = st.selectbox(t["addr_pick"], names, key="addr_pick")
                 if st.button(t["addr_add"], type="primary"):
+                    chosen = sugg[names.index(picked)]
+                    st.session_state.addr_coords[picked] = (chosen["lat"],
+                                                            chosen["lon"])
                     new = pd.DataFrame(
                         [[picked, DEF_DEMAND, DEF_READY, DEF_DUE, DEF_SERVICE]],
                         columns=ADDR_COLS)
@@ -547,10 +550,17 @@ if st.button(t["solve"], type="primary", width="stretch"):
             if len(adf) == 0:
                 st.error(t["no_customers"]); st.stop()
             all_addr = [st.session_state.depot_addr] + adf["address"].tolist()
-            with st.spinner(t["geocoding"]):
-                coords, errs = cached_geocode_many(tuple(all_addr), country)
-            if errs:
-                st.error(t["geo_err"] + "; ".join(errs)); st.stop()
+            # Ưu tiên tọa độ đã lưu lúc chọn gợi ý; chỉ geocode địa chỉ gõ tay
+            saved = st.session_state.addr_coords
+            need = [a for a in all_addr if a not in saved]
+            if need:
+                with st.spinner(t["geocoding"]):
+                    gc, errs = cached_geocode_many(tuple(need), country)
+                if errs:
+                    st.error(t["geo_err"] + "; ".join(errs)); st.stop()
+                for a, c in zip(need, gc):
+                    saved[a] = c
+            coords = [tuple(saved[a]) for a in all_addr]
             big = 100000
             inst = VRPTWInstance(
                 name="user_addresses",

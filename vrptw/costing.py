@@ -16,10 +16,17 @@ from .solution import Solution
 
 @dataclass
 class CostParams:
-    """Đơn giá chi phí / unit costs. Đơn vị tiền tự chọn (currency symbol)."""
+    """Đơn giá chi phí / unit costs. Đơn vị tiền tự chọn (currency symbol).
+
+    Lương tài xế tính theo 1 trong 2 cách (wage_mode):
+    - "per_distance" (mặc định): $/dặm — không khuyến khích đi chậm câu giờ
+    - "per_hour": $/giờ — theo thời lượng tuyến
+    """
 
     fuel_per_unit: float = 0.15        # nhiên liệu trên 1 đơn vị quãng đường
     maintenance_per_unit: float = 0.05  # bảo trì trên 1 đơn vị quãng đường
+    wage_mode: str = "per_distance"    # "per_distance" | "per_hour"
+    wage_per_distance: float = 0.60    # lương tài xế trên 1 đơn vị quãng đường ($/dặm)
     wage_per_hour: float = 20.0        # lương tài xế mỗi giờ
     mgmt_fee_per_vehicle: float = 15.0  # phí quản lý mỗi xe sử dụng
     deductible_per_vehicle: float = 10.0  # phí khấu trừ/bảo hiểm mỗi xe sử dụng
@@ -49,7 +56,10 @@ def route_cost_breakdown(sol: Solution, params: CostParams
 
         fuel = r.distance * params.fuel_per_unit
         maint = r.distance * params.maintenance_per_unit
-        labor = duration / 60.0 * params.wage_per_hour
+        if params.wage_mode == "per_hour":
+            labor = duration / 60.0 * params.wage_per_hour
+        else:  # per_distance — trả theo dặm
+            labor = r.distance * params.wage_per_distance
         mgmt = params.mgmt_fee_per_vehicle
         deduct = params.deductible_per_vehicle
 

@@ -49,7 +49,10 @@ def solution_to_excel(sol: Solution, cost_rows: list[dict], totals: dict,
         ["— Cost parameters —", ""],
         [f"Fuel per distance unit ({cur})", params.fuel_per_unit],
         [f"Maintenance per distance unit ({cur})", params.maintenance_per_unit],
-        [f"Driver wage per hour ({cur})", params.wage_per_hour],
+        ["Labor mode", "per distance ($/mile)"
+         if params.wage_mode == "per_distance" else "per hour ($/h)"],
+        [f"Driver wage per distance ({cur}/mile)", params.wage_per_distance],
+        [f"Driver wage per hour ({cur}/h)", params.wage_per_hour],
         [f"Management fee per vehicle ({cur})", params.mgmt_fee_per_vehicle],
         [f"Deductible per vehicle ({cur})", params.deductible_per_vehicle],
     ], columns=["Item", "Value"])

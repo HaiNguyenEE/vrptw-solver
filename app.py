@@ -57,6 +57,11 @@ T = {
         "costs_help": "Đơn giá để tính chi phí mỗi tuyến: nhiên liệu & bảo trì theo quãng đường, lương tài xế theo giờ, phí quản lý & khấu trừ theo xe sử dụng.",
         "fuel_cost": "Nhiên liệu / đơn vị quãng đường",
         "maint_cost": "Bảo trì / đơn vị quãng đường",
+        "wage_mode": "Cách trả lương tài xế",
+        "wage_mode_dist": "Theo dặm ($/mile)",
+        "wage_mode_hour": "Theo giờ ($/giờ)",
+        "wage_mode_help": "Trả theo dặm tránh việc tài xế đi chậm để câu giờ.",
+        "wage_dist": "Lương tài xế / dặm",
         "wage": "Lương tài xế / giờ",
         "mgmt_fee": "Phí quản lý / xe",
         "deduct_fee": "Phí khấu trừ (bảo hiểm) / xe",
@@ -117,6 +122,11 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "costs_help": "Unit prices used to compute per-route costs: fuel & maintenance per distance, driver wage per hour, management & deductible fees per used vehicle.",
         "fuel_cost": "Fuel / distance unit",
         "maint_cost": "Maintenance / distance unit",
+        "wage_mode": "Driver pay mode",
+        "wage_mode_dist": "Per mile ($/mile)",
+        "wage_mode_hour": "Per hour ($/h)",
+        "wage_mode_help": "Paying per mile avoids drivers going slow to rack up hours.",
+        "wage_dist": "Driver wage / mile",
         "wage": "Driver wage / hour",
         "mgmt_fee": "Management fee / vehicle",
         "deduct_fee": "Deductible (insurance) / vehicle",
@@ -201,7 +211,18 @@ with st.sidebar.expander(t["costs"], expanded=False):
                                 format="%.3f", key="fuel_cost")
     maint_cost = st.number_input(t["maint_cost"], 0.0, 1e6, 0.05, step=0.01,
                                  format="%.3f", key="maint_cost")
-    wage = st.number_input(t["wage"], 0.0, 1e6, 20.0, step=1.0, key="wage")
+    wage_mode_label = st.radio(t["wage_mode"],
+                               [t["wage_mode_dist"], t["wage_mode_hour"]],
+                               help=t["wage_mode_help"], key="wage_mode")
+    if wage_mode_label == t["wage_mode_dist"]:
+        wage_mode = "per_distance"
+        wage_dist = st.number_input(t["wage_dist"], 0.0, 1e6, 0.60, step=0.05,
+                                    format="%.2f", key="wage_dist")
+        wage = 20.0
+    else:
+        wage_mode = "per_hour"
+        wage = st.number_input(t["wage"], 0.0, 1e6, 20.0, step=1.0, key="wage")
+        wage_dist = 0.60
     mgmt_fee = st.number_input(t["mgmt_fee"], 0.0, 1e6, 15.0, step=1.0,
                                key="mgmt_fee")
     deduct_fee = st.number_input(t["deduct_fee"], 0.0, 1e6, 10.0, step=1.0,
@@ -209,6 +230,7 @@ with st.sidebar.expander(t["costs"], expanded=False):
 
 cost_params = CostParams(
     fuel_per_unit=float(fuel_cost), maintenance_per_unit=float(maint_cost),
+    wage_mode=wage_mode, wage_per_distance=float(wage_dist),
     wage_per_hour=float(wage), mgmt_fee_per_vehicle=float(mgmt_fee),
     deductible_per_vehicle=float(deduct_fee), currency=currency or "$")
 

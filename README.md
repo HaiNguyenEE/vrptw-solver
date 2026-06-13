@@ -15,7 +15,7 @@ Giải tự động bài toán **Vehicle Routing Problem with Time Windows (VRPT
 - **Ba nguồn dữ liệu / three input modes**: instance mẫu, file CSV, hoặc sinh ngẫu nhiên có seed
 - **Kiểm tra lời giải tự động / automatic verification**: mỗi khách đúng 1 lần, tải trọng, khung thời gian, trình tự thời gian
 - **Plotting**: bản đồ tuyến đường (mũi tên hướng đi, TW & demand từng khách) + biểu đồ Gantt lịch phục vụ so với khung thời gian
-- **💰 Mô hình chi phí vận hành / operating cost model**: nhiên liệu & bảo trì theo quãng đường, lương tài xế theo giờ, phí quản lý & phí khấu trừ (bảo hiểm) theo xe — tính tự động cho từng tuyến / fuel & maintenance per distance, hourly driver wage, management & deductible fees per vehicle, computed automatically per route
+- **💰 Mô hình chi phí vận hành / operating cost model**: nhiên liệu & bảo trì theo quãng đường, **lương tài xế theo dặm ($/mile) hoặc theo giờ ($/h)** (trả theo dặm tránh tài xế đi chậm câu giờ), phí quản lý & phí khấu trừ (bảo hiểm) theo xe — tính tự động cho từng tuyến / fuel & maintenance per distance, **driver wage per mile or per hour** (per-mile avoids drivers stalling for hours), management & deductible fees per vehicle
 - **📊 Xuất Excel kế toán / accounting Excel export**: file `.xlsx` 4 sheet (Summary, Routes & Costs, Schedule, Input Data) sẵn sàng cho kế toán / 4-sheet workbook ready for bookkeeping
 - **Xuất kết quả / export**: JSON lời giải đầy đủ + CSV lịch trình
 

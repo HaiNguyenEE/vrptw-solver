@@ -49,6 +49,11 @@ def main() -> None:
                    help="nhiên liệu / đơn vị quãng đường")
     p.add_argument("--maint-cost", type=float, default=0.05,
                    help="bảo trì / đơn vị quãng đường")
+    p.add_argument("--wage-mode", choices=["per_distance", "per_hour"],
+                   default="per_distance",
+                   help="cách trả lương: theo dặm (mặc định) hoặc theo giờ")
+    p.add_argument("--wage-dist", type=float, default=0.60,
+                   help="lương tài xế / đơn vị quãng đường ($/dặm)")
     p.add_argument("--wage", type=float, default=20.0, help="lương tài xế / giờ")
     p.add_argument("--mgmt-fee", type=float, default=15.0, help="phí quản lý / xe")
     p.add_argument("--deduct-fee", type=float, default=10.0,
@@ -58,6 +63,7 @@ def main() -> None:
 
     cost_params = CostParams(
         fuel_per_unit=args.fuel_cost, maintenance_per_unit=args.maint_cost,
+        wage_mode=args.wage_mode, wage_per_distance=args.wage_dist,
         wage_per_hour=args.wage, mgmt_fee_per_vehicle=args.mgmt_fee,
         deductible_per_vehicle=args.deduct_fee, currency=args.currency)
 

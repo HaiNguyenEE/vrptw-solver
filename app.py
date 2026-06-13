@@ -117,6 +117,7 @@ T = {
         "costs_tab": "💰 Chi phí",
         "total_cost": "Tổng chi phí",
         "cost_table": "Chi phí từng xe (thời gian tính bằng phút, lương quy đổi theo giờ)",
+        "cost_scroll_hint": "↔ Kéo thanh cuộn ngang dưới bảng để xem hết các cột. Cột 'Tuyến' đầy đủ ở tab Chi tiết.",
         "cost_chart": "Cơ cấu chi phí theo xe",
         "valid": "✔ Lời giải hợp lệ — thỏa mãn mọi ràng buộc (mỗi khách 1 lần, tải trọng, khung thời gian).",
         "invalid": "✘ Lời giải vi phạm ràng buộc:",
@@ -228,6 +229,7 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "costs_tab": "💰 Costs",
         "total_cost": "Total cost",
         "cost_table": "Per-vehicle costs (time in minutes, labor converted hourly)",
+        "cost_scroll_hint": "↔ Drag the horizontal scrollbar below the table to see all columns. Full 'Route' is in the Details tab.",
         "cost_chart": "Cost structure by vehicle",
         "valid": "✔ Solution is valid — all constraints satisfied (each customer once, capacity, time windows).",
         "invalid": "✘ Solution violates constraints:",
@@ -635,16 +637,18 @@ if st.button(t["solve"], type="primary", width="stretch"):
     with tab_cost:
         st.subheader(t["cost_table"])
         cur = cost_params.currency
-        cost_view = pd.DataFrame(cost_rows).rename(columns={
-            "vehicle": t["col_vehicle"], "route": t["col_route"],
+        # Bỏ cột "Tuyến" dài (xem ở tab Chi tiết); giữ bảng gọn, có cuộn ngang
+        cost_view = pd.DataFrame(cost_rows).drop(columns=["route"]).rename(columns={
+            "vehicle": t["col_vehicle"],
             "stops": "Stops", "load": t["col_load"],
             "distance": t["col_dist"], "depart": "Depart", "return": "Return",
-            "duration_min": "Duration (min)",
-            "fuel": f"⛽ Fuel ({cur})", "maintenance": f"🔧 Maint. ({cur})",
+            "duration_min": "Min",
+            "fuel": f"⛽ Fuel ({cur})", "maintenance": f"🔧 Maint ({cur})",
             "labor": f"👷 Labor ({cur})", "mgmt_fee": f"🗂 Mgmt ({cur})",
-            "deductible": f"🛡 Deduct. ({cur})", "total": f"Σ Total ({cur})",
+            "deductible": f"🛡 Deduct ({cur})", "total": f"Σ Total ({cur})",
         })
-        st.dataframe(cost_view, width="stretch", hide_index=True)
+        st.dataframe(cost_view, width="stretch", hide_index=True, height=260)
+        st.caption(t["cost_scroll_hint"])
         st.subheader(t["cost_chart"])
         chart_df = pd.DataFrame(cost_rows).set_index("vehicle")[
             ["fuel", "maintenance", "labor", "mgmt_fee", "deductible"]]

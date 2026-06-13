@@ -620,6 +620,16 @@ if st.button(t["solve"], type="primary", width="stretch"):
                  + (f"\n\n{sol.status}" if sol.status else ""))
         st.stop()
 
+    # Lưu lời giải vào session để kết quả CÒN khi tương tác (đổi xe, đổi tab…)
+    st.session_state["sol"] = sol
+    st.session_state["sol_inst"] = inst
+    st.session_state["sol_addr_mode"] = addr_mode
+
+# ---- Hiển thị kết quả (luôn chạy nếu đã có lời giải trong session) ----------
+if st.session_state.get("sol") is not None:
+    sol = st.session_state["sol"]
+    inst = st.session_state["sol_inst"]
+    addr_mode = st.session_state["sol_addr_mode"]
     # ---- Kết quả / results ---------------------------------------------------
     cost_rows, cost_totals = route_cost_breakdown(sol, cost_params)
 

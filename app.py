@@ -317,7 +317,7 @@ time_limit = st.sidebar.slider(t["time_limit"], 1, 300, 10, key="time_limit")
 
 # ---- Chế độ vị trí / location mode -----------------------------------------
 loc_mode_label = st.sidebar.radio(
-    t["loc_mode"], [t["loc_xy"], t["loc_addr"]], help=t["loc_help"],
+    t["loc_mode"], [t["loc_addr"], t["loc_xy"]], help=t["loc_help"],
     key="loc_mode")
 addr_mode = loc_mode_label == t["loc_addr"]
 if addr_mode:
@@ -461,7 +461,9 @@ else:
     # ===================== CHẾ ĐỘ ĐỊA CHỈ THẬT =====================
     if "addr_df" not in st.session_state:
         st.session_state.addr_df = sample_addr_df()
-    st.session_state.setdefault("depot_addr", "")
+    # Đặt sẵn địa chỉ kho mẫu (người dùng có thể đổi bằng ô tìm kho)
+    st.session_state.setdefault("depot_addr",
+                                "411 W Ocean Blvd, Long Beach, CA 90802")
     st.session_state.setdefault("addr_suggestions", [])
     st.session_state.setdefault("depot_suggestions", [])
 

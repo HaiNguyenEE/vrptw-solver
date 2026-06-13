@@ -28,7 +28,7 @@ import time
 import pulp
 
 from .instance import VRPTWInstance
-from .solution import Route, Solution
+from .solution import Route, Solution, _compact_vehicles
 
 
 def solve(inst: VRPTWInstance, time_limit_s: int = 60, verbose: bool = False) -> Solution:
@@ -151,6 +151,7 @@ def solve(inst: VRPTWInstance, time_limit_s: int = 60, verbose: bool = False) ->
         routes.append(Route(vehicle=k, nodes=nodes, start_times=starts,
                             load=load, distance=route_d))
 
+    routes = _compact_vehicles(routes)
     sol = Solution(inst, routes, solver="milp-cbc", status=f"{status} (exact)",
                    runtime_s=runtime)
     sol.objective = pulp.value(prob.objective)

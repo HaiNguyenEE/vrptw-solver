@@ -11,7 +11,7 @@ import time
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 
 from .instance import VRPTWInstance
-from .solution import Route, Solution
+from .solution import Route, Solution, _compact_vehicles
 
 SCALE = 100  # hệ số scale khoảng cách/thời gian sang int
 
@@ -109,6 +109,7 @@ def solve(inst: VRPTWInstance, time_limit_s: int = 10) -> Solution:
         routes.append(Route(vehicle=v, nodes=nodes, start_times=starts,
                             load=load, distance=route_dist))
 
+    routes = _compact_vehicles(routes)
     sol = Solution(inst, routes, solver="ortools", status="FEASIBLE (heuristic)",
                    runtime_s=runtime)
     sol.objective = sol.total_distance

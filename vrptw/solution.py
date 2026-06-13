@@ -8,6 +8,21 @@ from dataclasses import dataclass, field
 from .instance import VRPTWInstance
 
 
+def _compact_vehicles(routes: "list[Route]") -> "list[Route]":
+    """Đánh số lại để các xe DÙNG THẬT là 0,1,2… (hiển thị Xe 1, 2, 3 liên tiếp).
+
+    Các xe giống hệt nhau nên việc bỏ trống xe index 0 là hợp lệ nhưng gây
+    khó hiểu; hàm này gom xe đã dùng lên đầu, xe trống xuống cuối.
+    """
+    used = [r for r in routes if r.used]
+    unused = [r for r in routes if not r.used]
+    for i, r in enumerate(used):
+        r.vehicle = i
+    for j, r in enumerate(unused):
+        r.vehicle = len(used) + j
+    return used + unused
+
+
 @dataclass
 class Route:
     vehicle: int

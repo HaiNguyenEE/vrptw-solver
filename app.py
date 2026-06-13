@@ -96,6 +96,12 @@ T = {
         "gantt_tab": "📅 Lịch phục vụ",
         "detail_tab": "📄 Chi tiết",
         "route_detail": "Chi tiết tuyến đường",
+        "sheet_tab": "🚚 Phiếu xe",
+        "pick_vehicle": "Chọn xe để xem lộ trình",
+        "m_stop": "Điểm", "m_addr": "Địa chỉ", "m_goods": "Hàng",
+        "m_arrive": "Giờ đến", "m_tw": "Khung giờ", "m_cumload": "Tải dồn",
+        "m_stops": "Số điểm dừng",
+        "dl_manifest": "🖨️ Tải phiếu lộ trình xe này (.txt để in)",
         "col_vehicle": "Xe", "col_route": "Tuyến", "col_times": "Thời điểm phục vụ",
         "col_load": "Tải", "col_dist": "Quãng đường",
         "download_json": "⬇️ Tải lời giải (JSON)",
@@ -208,6 +214,12 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "gantt_tab": "📅 Schedule",
         "detail_tab": "📄 Details",
         "route_detail": "Route details",
+        "sheet_tab": "🚚 Driver sheet",
+        "pick_vehicle": "Pick a vehicle to view its route",
+        "m_stop": "Stop", "m_addr": "Address", "m_goods": "Goods",
+        "m_arrive": "Arrive", "m_tw": "Time window", "m_cumload": "Cum. load",
+        "m_stops": "Stops",
+        "dl_manifest": "🖨️ Download this vehicle's route sheet (.txt to print)",
         "col_vehicle": "Vehicle", "col_route": "Route", "col_times": "Service start times",
         "col_load": "Load", "col_dist": "Distance",
         "download_json": "⬇️ Download solution (JSON)",
@@ -627,8 +639,9 @@ if st.button(t["solve"], type="primary", width="stretch"):
     else:
         st.success(t["valid"])
 
-    tab1, tab2, tab_cost, tab3 = st.tabs(
-        [t["routes_tab"], t["gantt_tab"], t["costs_tab"], t["detail_tab"]])
+    tab1, tab2, tab_cost, tab3, tab_sheet = st.tabs(
+        [t["routes_tab"], t["gantt_tab"], t["costs_tab"], t["detail_tab"],
+         t["sheet_tab"]])
     with tab1:
         st.pyplot(plotting.plot_routes(sol, lang=lang))
     with tab2:
@@ -668,6 +681,60 @@ if st.button(t["solve"], type="primary", width="stretch"):
                 t["col_dist"]: round(r.distance, 2),
             })
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+    with tab_sheet:
+        # ---- Phiếu lộ trình theo từng xe / per-vehicle driver sheet ----------
+        used_routes = [r for r in sol.routes if r.used]
+        veh_labels = [f"{t['col_vehicle']} {r.vehicle + 1}" for r in used_routes]
+        sel = st.selectbox(t["pick_vehicle"], veh_labels, key="sheet_veh")
+        rsel = used_routes[veh_labels.index(sel)]
+
+        def _node_addr(node):
+            if inst.addresses:
+                return "🏭 Depot" if node == inst.depot else inst.addresses[node]
+            x, y = inst.locations[node]
+            return f"Depot ({x:g}, {y:g})" if node == inst.depot else f"#{node} ({x:g}, {y:g})"
+
+        man_rows, cum = [], 0
+        for idx, node in enumerate(rsel.nodes):
+            is_depot = node == inst.depot
+            dem = 0 if is_depot else inst.demands[node]
+            cum += dem
+            a, b = inst.time_windows[node]
+            man_rows.append({
+                t["m_stop"]: idx,
+                t["m_addr"]: _node_addr(node),
+                t["m_goods"]: "" if is_depot else str(dem),
+                t["m_arrive"]: time_fmt(rsel.start_times[idx]),
+                t["m_tw"]: "" if is_depot else f"{time_fmt(a)}–{time_fmt(b)}",
+                t["m_cumload"]: f"{cum}/{inst.vehicle_capacity}",
+            })
+        man_df = pd.DataFrame(man_rows)
+        dist_unit2 = f" {inst.distance_unit}" if addr_mode else ""
+        st.markdown(
+            f"**{sel}** — {t['m_stops']}: {len(rsel.nodes) - 2} · "
+            f"{t['col_load']}: {rsel.load}/{inst.vehicle_capacity} · "
+            f"{t['col_dist']}: {rsel.distance:.2f}{dist_unit2}")
+        st.dataframe(man_df, width="stretch", hide_index=True)
+
+        # Phiếu dạng văn bản để in / tải
+        lines = [f"{t['sheet_tab']} — {sel}",
+                 f"{t['depot_current']}: {_node_addr(inst.depot)}",
+                 "=" * 48]
+        for row in man_rows:
+            lines.append(
+                f"[{row[t['m_stop']]}] {row[t['m_arrive']]}  {row[t['m_addr']]}")
+            if row[t["m_goods"]] != "":
+                lines.append(
+                    f"      {t['m_goods']}: {row[t['m_goods']]} · "
+                    f"{t['m_tw']}: {row[t['m_tw']]} · {t['m_cumload']}: {row[t['m_cumload']]}")
+        lines += ["=" * 48,
+                  f"{t['col_dist']}: {rsel.distance:.2f}{dist_unit2} · "
+                  f"{t['col_load']}: {rsel.load}/{inst.vehicle_capacity}"]
+        manifest_txt = "\n".join(lines)
+        st.download_button(t["dl_manifest"], manifest_txt,
+                           file_name=f"route_vehicle_{rsel.vehicle + 1}.txt",
+                           mime="text/plain", width="stretch")
 
     # ---- Tải xuống / downloads ----------------------------------------------
     sol_json = {

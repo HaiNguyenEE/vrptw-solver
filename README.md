@@ -15,7 +15,9 @@ Giải tự động bài toán **Vehicle Routing Problem with Time Windows (VRPT
 - **Ba nguồn dữ liệu / three input modes**: instance mẫu, file CSV, hoặc sinh ngẫu nhiên có seed
 - **Kiểm tra lời giải tự động / automatic verification**: mỗi khách đúng 1 lần, tải trọng, khung thời gian, trình tự thời gian
 - **Plotting**: bản đồ tuyến đường (mũi tên hướng đi, TW & demand từng khách) + biểu đồ Gantt lịch phục vụ so với khung thời gian
-- **Xuất kết quả / export**: JSON lời giải đầy đủ (tuyến, thời điểm phục vụ, tải, quãng đường)
+- **💰 Mô hình chi phí vận hành / operating cost model**: nhiên liệu & bảo trì theo quãng đường, lương tài xế theo giờ, phí quản lý & phí khấu trừ (bảo hiểm) theo xe — tính tự động cho từng tuyến / fuel & maintenance per distance, hourly driver wage, management & deductible fees per vehicle, computed automatically per route
+- **📊 Xuất Excel kế toán / accounting Excel export**: file `.xlsx` 4 sheet (Summary, Routes & Costs, Schedule, Input Data) sẵn sàng cho kế toán / 4-sheet workbook ready for bookkeeping
+- **Xuất kết quả / export**: JSON lời giải đầy đủ + CSV lịch trình
 
 ## Cài đặt / Installation
 
@@ -33,8 +35,9 @@ Mở trình duyệt tại địa chỉ hiện ra (mặc định `http://localhos
 
 - Chọn ngôn ngữ **Tiếng Việt / English** ở thanh bên
 - Nhập/sửa trực tiếp bảng dữ liệu khách hàng (thêm/xóa hàng), upload CSV, hoặc sinh ngẫu nhiên
-- Chỉnh số xe, sức chứa, thuật toán, time limit
-- Bấm **🚀 Giải bài toán / Solve** → nhận tuyến tối ưu, bản đồ tuyến, lịch phục vụ (Gantt), và tải về JSON/CSV
+- Chỉnh số xe (tối đa 50), sức chứa, thuật toán, time limit
+- Nhập đơn giá chi phí trong mục **💰 Chi phí vận hành**: nhiên liệu, bảo trì, lương, phí quản lý, phí khấu trừ, ký hiệu tiền tệ
+- Bấm **🚀 Giải bài toán / Solve** → nhận tuyến tối ưu, bản đồ tuyến, lịch Gantt, bảng chi phí từng xe, và tải về **Excel kế toán** / JSON / CSV
 
 *Pick your language in the sidebar, edit the customer table directly (add/remove rows), upload a CSV or generate a random instance, then click Solve to get optimal routes, a route map, a Gantt schedule, and JSON/CSV downloads.*
 

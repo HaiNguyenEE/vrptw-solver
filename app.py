@@ -15,6 +15,8 @@ import pandas as pd
 import streamlit as st
 
 from vrptw import VRPTWInstance, plotting, solver_milp, solver_ortools
+from vrptw.costing import CostParams, route_cost_breakdown
+from vrptw.excel_export import solution_to_excel
 
 # ===========================================================================
 # Song ngữ / Translations
@@ -50,6 +52,19 @@ T = {
         "col_load": "Tải", "col_dist": "Quãng đường",
         "download_json": "⬇️ Tải lời giải (JSON)",
         "download_csv": "⬇️ Tải lịch trình (CSV)",
+        "download_xlsx": "📊 Xuất Excel kế toán (.xlsx)",
+        "costs": "💰 Chi phí vận hành",
+        "costs_help": "Đơn giá để tính chi phí mỗi tuyến: nhiên liệu & bảo trì theo quãng đường, lương tài xế theo giờ, phí quản lý & khấu trừ theo xe sử dụng.",
+        "fuel_cost": "Nhiên liệu / đơn vị quãng đường",
+        "maint_cost": "Bảo trì / đơn vị quãng đường",
+        "wage": "Lương tài xế / giờ",
+        "mgmt_fee": "Phí quản lý / xe",
+        "deduct_fee": "Phí khấu trừ (bảo hiểm) / xe",
+        "currency": "Ký hiệu tiền tệ",
+        "costs_tab": "💰 Chi phí",
+        "total_cost": "Tổng chi phí",
+        "cost_table": "Chi phí từng xe (thời gian tính bằng phút, lương quy đổi theo giờ)",
+        "cost_chart": "Cơ cấu chi phí theo xe",
         "valid": "✔ Lời giải hợp lệ — thỏa mãn mọi ràng buộc (mỗi khách 1 lần, tải trọng, khung thời gian).",
         "invalid": "✘ Lời giải vi phạm ràng buộc:",
         "no_solution": "Không tìm thấy lời giải khả thi. Hãy nới khung thời gian, tăng số xe hoặc sức chứa.",
@@ -97,6 +112,19 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "col_load": "Load", "col_dist": "Distance",
         "download_json": "⬇️ Download solution (JSON)",
         "download_csv": "⬇️ Download schedule (CSV)",
+        "download_xlsx": "📊 Export accounting Excel (.xlsx)",
+        "costs": "💰 Operating costs",
+        "costs_help": "Unit prices used to compute per-route costs: fuel & maintenance per distance, driver wage per hour, management & deductible fees per used vehicle.",
+        "fuel_cost": "Fuel / distance unit",
+        "maint_cost": "Maintenance / distance unit",
+        "wage": "Driver wage / hour",
+        "mgmt_fee": "Management fee / vehicle",
+        "deduct_fee": "Deductible (insurance) / vehicle",
+        "currency": "Currency symbol",
+        "costs_tab": "💰 Costs",
+        "total_cost": "Total cost",
+        "cost_table": "Per-vehicle costs (time in minutes, labor converted hourly)",
+        "cost_chart": "Cost structure by vehicle",
         "valid": "✔ Solution is valid — all constraints satisfied (each customer once, capacity, time windows).",
         "invalid": "✘ Solution violates constraints:",
         "no_solution": "No feasible solution found. Try widening time windows, adding vehicles or capacity.",
@@ -161,9 +189,28 @@ st.sidebar.header(t["settings"])
 solver_name = st.sidebar.selectbox(
     t["solver"], ["OR-Tools (heuristic)", "MILP — CBC (exact)"],
     help=t["solver_help"], key="solver")
-num_vehicles = st.sidebar.number_input(t["vehicles"], 1, 10, 3, key="vehicles")
-capacity = st.sidebar.number_input(t["capacity"], 1, 1000, 10, key="capacity")
-time_limit = st.sidebar.slider(t["time_limit"], 1, 120, 10, key="time_limit")
+num_vehicles = st.sidebar.number_input(t["vehicles"], 1, 50, 3, key="vehicles")
+capacity = st.sidebar.number_input(t["capacity"], 1, 100000, 10, key="capacity")
+time_limit = st.sidebar.slider(t["time_limit"], 1, 300, 10, key="time_limit")
+
+# ---- Sidebar: chi phí / cost parameters ------------------------------------
+with st.sidebar.expander(t["costs"], expanded=False):
+    st.caption(t["costs_help"])
+    currency = st.text_input(t["currency"], "$", max_chars=4, key="currency")
+    fuel_cost = st.number_input(t["fuel_cost"], 0.0, 1e6, 0.15, step=0.01,
+                                format="%.3f", key="fuel_cost")
+    maint_cost = st.number_input(t["maint_cost"], 0.0, 1e6, 0.05, step=0.01,
+                                 format="%.3f", key="maint_cost")
+    wage = st.number_input(t["wage"], 0.0, 1e6, 20.0, step=1.0, key="wage")
+    mgmt_fee = st.number_input(t["mgmt_fee"], 0.0, 1e6, 15.0, step=1.0,
+                               key="mgmt_fee")
+    deduct_fee = st.number_input(t["deduct_fee"], 0.0, 1e6, 10.0, step=1.0,
+                                 key="deduct_fee")
+
+cost_params = CostParams(
+    fuel_per_unit=float(fuel_cost), maintenance_per_unit=float(maint_cost),
+    wage_per_hour=float(wage), mgmt_fee_per_vehicle=float(mgmt_fee),
+    deductible_per_vehicle=float(deduct_fee), currency=currency or "$")
 
 with st.sidebar.expander(t["guide"]):
     st.markdown(t["guide_body"])
@@ -216,11 +263,14 @@ if st.button(t["solve"], type="primary", width="stretch"):
         st.stop()
 
     # ---- Kết quả / results ---------------------------------------------------
-    m1, m2, m3, m4 = st.columns(4)
+    cost_rows, cost_totals = route_cost_breakdown(sol, cost_params)
+
+    m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric(t["status"], sol.status)
     m2.metric(t["total_dist"], f"{sol.total_distance:.2f}")
     m3.metric(t["veh_used"], f"{sol.vehicles_used}/{inst.num_vehicles}")
-    m4.metric(t["runtime"], f"{sol.runtime_s:.2f}s")
+    m4.metric(t["total_cost"], f"{cost_params.currency}{cost_totals['total']:,.2f}")
+    m5.metric(t["runtime"], f"{sol.runtime_s:.2f}s")
 
     errors = sol.verify()
     if errors:
@@ -230,11 +280,30 @@ if st.button(t["solve"], type="primary", width="stretch"):
     else:
         st.success(t["valid"])
 
-    tab1, tab2, tab3 = st.tabs([t["routes_tab"], t["gantt_tab"], t["detail_tab"]])
+    tab1, tab2, tab_cost, tab3 = st.tabs(
+        [t["routes_tab"], t["gantt_tab"], t["costs_tab"], t["detail_tab"]])
     with tab1:
         st.pyplot(plotting.plot_routes(sol, lang=lang))
     with tab2:
         st.pyplot(plotting.plot_schedule(sol, lang=lang))
+    with tab_cost:
+        st.subheader(t["cost_table"])
+        cur = cost_params.currency
+        cost_view = pd.DataFrame(cost_rows).rename(columns={
+            "vehicle": t["col_vehicle"], "route": t["col_route"],
+            "stops": "Stops", "load": t["col_load"],
+            "distance": t["col_dist"], "depart": "Depart", "return": "Return",
+            "duration_min": "Duration (min)",
+            "fuel": f"⛽ Fuel ({cur})", "maintenance": f"🔧 Maint. ({cur})",
+            "labor": f"👷 Labor ({cur})", "mgmt_fee": f"🗂 Mgmt ({cur})",
+            "deductible": f"🛡 Deduct. ({cur})", "total": f"Σ Total ({cur})",
+        })
+        st.dataframe(cost_view, width="stretch", hide_index=True)
+        st.subheader(t["cost_chart"])
+        chart_df = pd.DataFrame(cost_rows).set_index("vehicle")[
+            ["fuel", "maintenance", "labor", "mgmt_fee", "deductible"]]
+        chart_df.index = [f"{t['col_vehicle']} {v}" for v in chart_df.index]
+        st.bar_chart(chart_df, stack=True)
     with tab3:
         st.subheader(t["route_detail"])
         rows = []
@@ -268,11 +337,18 @@ if st.button(t["solve"], type="primary", width="stretch"):
     csv_buf = io.StringIO()
     pd.DataFrame(schedule_rows).to_csv(csv_buf, index=False)
 
-    d1, d2 = st.columns(2)
-    d1.download_button(t["download_json"],
+    xlsx_bytes = solution_to_excel(sol, cost_rows, cost_totals, cost_params)
+
+    d1, d2, d3 = st.columns(3)
+    d1.download_button(t["download_xlsx"], xlsx_bytes,
+                       file_name="vrptw_report.xlsx",
+                       mime=("application/vnd.openxmlformats-officedocument"
+                             ".spreadsheetml.sheet"),
+                       type="primary", width="stretch")
+    d2.download_button(t["download_json"],
                        json.dumps(sol_json, ensure_ascii=False, indent=2),
                        file_name="vrptw_solution.json", mime="application/json",
                        width="stretch")
-    d2.download_button(t["download_csv"], csv_buf.getvalue(),
+    d3.download_button(t["download_csv"], csv_buf.getvalue(),
                        file_name="vrptw_schedule.csv", mime="text/csv",
                        width="stretch")

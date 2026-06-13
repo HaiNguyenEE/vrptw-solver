@@ -16,6 +16,8 @@ import os
 
 from vrptw import VRPTWInstance
 from vrptw import plotting, solver_milp, solver_ortools
+from vrptw.costing import CostParams, route_cost_breakdown
+from vrptw.excel_export import solution_to_excel
 
 
 def build_instance(args: argparse.Namespace) -> VRPTWInstance:
@@ -42,7 +44,22 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=42, help="seed (random)")
     p.add_argument("--time-limit", type=int, default=10, help="giới hạn thời gian giải (s)")
     p.add_argument("--out", default="results", help="thư mục lưu kết quả")
+    # ---- Tham số chi phí / cost parameters --------------------------------
+    p.add_argument("--fuel-cost", type=float, default=0.15,
+                   help="nhiên liệu / đơn vị quãng đường")
+    p.add_argument("--maint-cost", type=float, default=0.05,
+                   help="bảo trì / đơn vị quãng đường")
+    p.add_argument("--wage", type=float, default=20.0, help="lương tài xế / giờ")
+    p.add_argument("--mgmt-fee", type=float, default=15.0, help="phí quản lý / xe")
+    p.add_argument("--deduct-fee", type=float, default=10.0,
+                   help="phí khấu trừ (bảo hiểm) / xe")
+    p.add_argument("--currency", default="$", help="ký hiệu tiền tệ")
     args = p.parse_args()
+
+    cost_params = CostParams(
+        fuel_per_unit=args.fuel_cost, maintenance_per_unit=args.maint_cost,
+        wage_per_hour=args.wage, mgmt_fee_per_vehicle=args.mgmt_fee,
+        deductible_per_vehicle=args.deduct_fee, currency=args.currency)
 
     inst = build_instance(args)
     os.makedirs(args.out, exist_ok=True)
@@ -60,8 +77,20 @@ def main() -> None:
         plt.close(plotting.plot_routes(sol, path=f"{prefix}_routes.png"))
         plt.close(plotting.plot_schedule(sol, path=f"{prefix}_schedule.png"))
         sol.to_json(f"{prefix}_solution.json")
+
+        # Báo cáo chi phí + Excel kế toán
+        cost_rows, cost_totals = route_cost_breakdown(sol, cost_params)
+        cur = cost_params.currency
+        print(f"Tổng chi phí: {cur}{cost_totals['total']:,.2f} "
+              f"(nhiên liệu {cur}{cost_totals['fuel']:,.2f}, "
+              f"bảo trì {cur}{cost_totals['maintenance']:,.2f}, "
+              f"nhân công {cur}{cost_totals['labor']:,.2f}, "
+              f"quản lý {cur}{cost_totals['mgmt_fee']:,.2f}, "
+              f"khấu trừ {cur}{cost_totals['deductible']:,.2f})")
+        with open(f"{prefix}_report.xlsx", "wb") as f:
+            f.write(solution_to_excel(sol, cost_rows, cost_totals, cost_params))
         print(f"Đã lưu: {prefix}_routes.png, {prefix}_schedule.png, "
-              f"{prefix}_solution.json\n")
+              f"{prefix}_solution.json, {prefix}_report.xlsx\n")
 
 
 if __name__ == "__main__":

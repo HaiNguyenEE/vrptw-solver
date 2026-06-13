@@ -69,6 +69,21 @@ node,x,y,demand,ready_time,due_time,service_time
 ...
 ```
 
+### Giải thích các cột / Column reference
+
+**Đơn vị thời gian / time unit:** chọn một đơn vị thống nhất (thường là **phút kể từ đầu ca** — ca bắt đầu 8:00 ⇒ mốc 0 = 8:00, 540 = 17:00). Mọi cột thời gian và quãng đường dùng cùng đơn vị. *Pick one consistent unit (usually minutes since shift start).*
+
+| Cột / Column | Ý nghĩa / Meaning | Cách xác định / How to set |
+|---|---|---|
+| `node` | Số điểm; `0` = depot/kho. *Point index; 0 = depot.* | Tự đánh số. *Just number them.* |
+| `x`, `y` | Tọa độ. *Coordinates.* | Từ bản đồ/GPS. Khoảng cách chim bay = quãng đường **và** thời gian di chuyển. *From map/GPS; straight-line = distance & travel time.* |
+| `demand` | Lượng hàng. *Goods demand.* | Cùng đơn vị với sức chứa xe; depot = 0. *Same unit as capacity; depot 0.* |
+| `ready_time` | Sớm nhất được giao; đến sớm thì **chờ**. *Earliest service start; early ⇒ wait.* | Giờ khách mở cửa. VD nhận từ 9:00, mốc 0=8:00 ⇒ 60. *Customer open time.* |
+| `due_time` | Muộn nhất được giao; trễ ⇒ **bất khả thi**. *Latest start; late ⇒ infeasible.* | Hạn chót nhận. VD đến 11:00 ⇒ 180. `[ready,due]` = khung giờ. *Cutoff; the window.* |
+| `service_time` | Thời gian đỗ giao/bốc dỡ. *Dwell/unload time.* | Ước lượng bốc dỡ + ký nhận, VD 5. *Unload + sign-off estimate.* |
+
+Mẹo: giao bất cứ lúc nào ⇒ `ready_time=0`, `due_time` lớn (vd 1000). *Tip: anytime ⇒ ready 0, large due.*
+
 Kết quả lưu trong `results/`: `*_routes.png`, `*_schedule.png`, `*_solution.json`.
 
 ## Mô hình toán / Mathematical model

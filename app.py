@@ -33,7 +33,22 @@ T = {
         "capacity": "Sức chứa mỗi xe",
         "time_limit": "Giới hạn thời gian giải (giây)",
         "data": "📋 Dữ liệu bài toán",
-        "data_help": "Hàng đầu tiên (node 0) là **depot** (kho). Mỗi hàng sau là một khách hàng: tọa độ (x, y), nhu cầu hàng, khung thời gian [sẵn sàng, hạn chót] và thời gian phục vụ. Thêm/xóa hàng trực tiếp trong bảng.",
+        "data_help": "Hàng đầu tiên (node 0) là **depot** (kho). Mỗi hàng sau là một khách hàng. Thêm/xóa hàng trực tiếp trong bảng. Xem mục **📖 Giải thích các cột** ngay dưới để hiểu rõ từng tham số.",
+        "cols_guide": "📖 Giải thích các cột dữ liệu",
+        "cols_guide_body": """
+**Đơn vị thời gian:** bạn tự chọn một đơn vị thống nhất cho cả bài (phút hoặc giờ). Cách phổ biến là tính theo **phút kể từ đầu ca** — ví dụ ca bắt đầu 8:00 sáng thì mốc 0 = 8:00, mốc 120 = 10:00, mốc 540 = 17:00. Mọi cột thời gian (`ready_time`, `due_time`, `service_time`) và quãng đường phải dùng **cùng một đơn vị**.
+
+| Cột | Ý nghĩa | Cách xác định |
+|---|---|---|
+| **node** | Số thứ tự điểm. `0` = kho (depot). | Tự đánh số, app tự sắp lại. |
+| **x, y** | Tọa độ điểm trên mặt phẳng. | Lấy từ bản đồ/GPS (km), hoặc tọa độ tương đối. Khoảng cách giữa 2 điểm = đường chim bay, dùng làm cả quãng đường **và** thời gian di chuyển. |
+| **demand** | Lượng hàng khách cần nhận. | Cùng đơn vị với *sức chứa xe* (thùng, kg, pallet…). Depot = 0. |
+| **ready_time** | Thời điểm **sớm nhất** được bắt đầu giao. Đến sớm hơn thì xe phải **chờ**. | Khách mở cửa lúc nào? VD khách nhận hàng từ 9:00 → nếu mốc 0 = 8:00 thì `ready_time = 60`. |
+| **due_time** | Thời điểm **muộn nhất** được bắt đầu giao. Đến trễ hơn → tuyến **không hợp lệ**. | Hạn chót khách nhận. VD chỉ nhận đến 11:00 → `due_time = 180`. Khoảng `[ready_time, due_time]` chính là **khung giờ** của khách. |
+| **service_time** | Thời gian đỗ lại để giao/bốc dỡ tại khách đó. | Ước lượng thực tế: bốc dỡ + ký nhận. VD mất 5 phút → `service_time = 5`. |
+
+**Mẹo:** muốn khách nhận bất cứ lúc nào trong ngày thì để `ready_time = 0` và `due_time` = một số lớn (vd 1000). Depot thường để khung rộng `[0, 1000]` để xe xuất phát/về tự do.
+""",
         "load_sample": "📦 Nạp dữ liệu mẫu",
         "gen_random": "🎲 Sinh ngẫu nhiên",
         "n_random": "Số khách hàng (ngẫu nhiên)",
@@ -98,7 +113,22 @@ Khoảng cách Euclid được dùng làm cả chi phí lẫn thời gian di chu
         "capacity": "Capacity per vehicle",
         "time_limit": "Solver time limit (seconds)",
         "data": "📋 Problem data",
-        "data_help": "The first row (node 0) is the **depot**. Each following row is a customer: coordinates (x, y), demand, time window [ready, due] and service time. Add/remove rows directly in the table.",
+        "data_help": "The first row (node 0) is the **depot**. Each following row is a customer. Add/remove rows directly in the table. See **📖 Column reference** below to understand each parameter.",
+        "cols_guide": "📖 Column reference (what each field means)",
+        "cols_guide_body": """
+**Time unit:** pick one consistent unit for the whole problem (minutes or hours). The common convention is **minutes since shift start** — e.g. if the shift starts at 8:00 AM, then 0 = 8:00, 120 = 10:00, 540 = 5:00 PM. All time columns (`ready_time`, `due_time`, `service_time`) and distances must use the **same unit**.
+
+| Column | Meaning | How to determine |
+|---|---|---|
+| **node** | Point index. `0` = warehouse (depot). | Just number them; the app re-indexes automatically. |
+| **x, y** | Point coordinates on a plane. | From a map/GPS (km) or relative coords. Distance between two points = straight-line, used as both travel distance **and** travel time. |
+| **demand** | Goods the customer needs. | Same unit as *vehicle capacity* (boxes, kg, pallets…). Depot = 0. |
+| **ready_time** | **Earliest** time service may start. Arrive earlier → the vehicle **waits**. | When does the customer open? E.g. receives from 9:00 → if 0 = 8:00, then `ready_time = 60`. |
+| **due_time** | **Latest** time service may start. Arrive later → route is **infeasible**. | Customer's cutoff. E.g. only until 11:00 → `due_time = 180`. The range `[ready_time, due_time]` is the customer's **time window**. |
+| **service_time** | Time parked to unload/serve at that stop. | Real estimate: unloading + sign-off. E.g. 5 minutes → `service_time = 5`. |
+
+**Tip:** to let a customer be served anytime, set `ready_time = 0` and a large `due_time` (e.g. 1000). The depot usually has a wide window `[0, 1000]` so vehicles can leave/return freely.
+""",
         "load_sample": "📦 Load sample data",
         "gen_random": "🎲 Generate random",
         "n_random": "Number of customers (random)",
@@ -241,6 +271,9 @@ with st.sidebar.expander(t["guide"]):
 st.header(t["data"])
 st.markdown(t["data_help"])
 
+with st.expander(t["cols_guide"]):
+    st.markdown(t["cols_guide_body"])
+
 if "df" not in st.session_state:
     st.session_state.df = instance_to_df(VRPTWInstance.sample())
 
@@ -287,12 +320,12 @@ if st.button(t["solve"], type="primary", width="stretch"):
     # ---- Kết quả / results ---------------------------------------------------
     cost_rows, cost_totals = route_cost_breakdown(sol, cost_params)
 
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric(t["status"], sol.status)
-    m2.metric(t["total_dist"], f"{sol.total_distance:.2f}")
-    m3.metric(t["veh_used"], f"{sol.vehicles_used}/{inst.num_vehicles}")
-    m4.metric(t["total_cost"], f"{cost_params.currency}{cost_totals['total']:,.2f}")
-    m5.metric(t["runtime"], f"{sol.runtime_s:.2f}s")
+    st.markdown(f"**{t['status']}:** {sol.status}")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(t["total_dist"], f"{sol.total_distance:.2f}")
+    m2.metric(t["veh_used"], f"{sol.vehicles_used}/{inst.num_vehicles}")
+    m3.metric(t["total_cost"], f"{cost_params.currency}{cost_totals['total']:,.2f}")
+    m4.metric(t["runtime"], f"{sol.runtime_s:.2f}s")
 
     errors = sol.verify()
     if errors:

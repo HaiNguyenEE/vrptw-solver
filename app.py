@@ -399,14 +399,33 @@ def cached_osrm_table(coords_tuple, unit):
     return routing_osrm.table([tuple(c) for c in coords_tuple], unit=unit)
 
 
+# Giá trị mặc định cho ô bỏ trống ở hàng mới / defaults for blank cells
+DEF_READY = 0.0       # phút kể từ đầu ca
+DEF_DUE = 1000.0      # khung giờ rộng (≈ cả ngày)
+DEF_SERVICE = 10.0    # phút phục vụ
+DEF_DEMAND = 1
+
+
+def _empty(v) -> bool:
+    """True nếu ô trống/None/NaN."""
+    if v is None:
+        return True
+    try:
+        if isinstance(v, float) and pd.isna(v):
+            return True
+    except Exception:
+        pass
+    return str(v).strip() in ("", "None", "nan", "NaN")
+
+
 def _clock_editor(df):
     """Hiển thị bảng với ready/due theo HH:MM (nếu clock_mode); trả df đã quy đổi phút."""
     if clock_mode:
         disp = df.copy()
         disp["ready_time"] = disp["ready_time"].apply(
-            lambda v: minutes_to_clock(shift_start_min + float(v)))
+            lambda v: "" if _empty(v) else minutes_to_clock(shift_start_min + float(v)))
         disp["due_time"] = disp["due_time"].apply(
-            lambda v: minutes_to_clock(shift_start_min + float(v)))
+            lambda v: "" if _empty(v) else minutes_to_clock(shift_start_min + float(v)))
         disp = disp.rename(columns={"ready_time": "ready (HH:MM)",
                                     "due_time": "due (HH:MM)",
                                     "service_time": "service (min)"})
@@ -415,13 +434,22 @@ def _clock_editor(df):
         ed = ed.rename(columns={"ready (HH:MM)": "ready_time",
                                 "due (HH:MM)": "due_time",
                                 "service (min)": "service_time"})
+        # Hàng mới có thể bỏ trống → dùng mặc định, tránh lỗi parse
         ed["ready_time"] = ed["ready_time"].apply(
-            lambda v: clock_to_minutes(v) - shift_start_min)
+            lambda v: DEF_READY if _empty(v) else clock_to_minutes(v) - shift_start_min)
         ed["due_time"] = ed["due_time"].apply(
-            lambda v: clock_to_minutes(v) - shift_start_min)
+            lambda v: DEF_DUE if _empty(v) else clock_to_minutes(v) - shift_start_min)
+        ed["service_time"] = ed["service_time"].apply(
+            lambda v: DEF_SERVICE if _empty(v) else float(v))
         return ed
-    return st.data_editor(df, num_rows="dynamic", width="stretch",
-                          hide_index=True)
+    ed = st.data_editor(df, num_rows="dynamic", width="stretch", hide_index=True)
+    ed["ready_time"] = ed["ready_time"].apply(
+        lambda v: DEF_READY if _empty(v) else float(v))
+    ed["due_time"] = ed["due_time"].apply(
+        lambda v: DEF_DUE if _empty(v) else float(v))
+    ed["service_time"] = ed["service_time"].apply(
+        lambda v: DEF_SERVICE if _empty(v) else float(v))
+    return ed
 
 
 # ---- Dữ liệu / data ---------------------------------------------------------
@@ -467,43 +495,41 @@ else:
     st.session_state.setdefault("addr_suggestions", [])
     st.session_state.setdefault("depot_suggestions", [])
 
-    # --- Địa chỉ kho (depot) ---
+    # --- Địa chỉ kho (depot) — gõ là gợi ý hiện ra ngay ---
     st.subheader(t["depot_addr"])
-    dq1, dq2 = st.columns([3, 1])
-    depot_query = dq1.text_input(t["addr_query"], key="depot_query",
-                                 label_visibility="collapsed")
-    if dq2.button(t["depot_find"], width="stretch"):
-        st.session_state.depot_suggestions = cached_suggest(depot_query, country)
-    if st.session_state.depot_suggestions:
-        opts = [s["display_name"] for s in st.session_state.depot_suggestions]
-        pick = st.selectbox(t["addr_pick"], opts, key="depot_pick")
-        if st.button(t["depot_set"]):
-            st.session_state.depot_addr = pick
-            st.session_state.depot_suggestions = []
-            st.rerun()
+    depot_query = st.text_input(t["addr_query"], key="depot_query")
+    if depot_query and len(depot_query.strip()) >= 4:
+        sugg = cached_suggest(depot_query, country)
+        if sugg:
+            pick = st.selectbox(t["addr_pick"],
+                                [s["display_name"] for s in sugg],
+                                key="depot_pick")
+            if st.button(t["depot_set"]):
+                st.session_state.depot_addr = pick
+                st.rerun()
+        else:
+            st.caption(t["addr_none"])
     if st.session_state.depot_addr:
         st.success(f"📍 {t['depot_current']}: {st.session_state.depot_addr}")
 
-    # --- Tìm & thêm địa chỉ giao hàng (autocomplete) ---
+    # --- Tìm & thêm địa chỉ giao hàng — gõ là gợi ý hiện ra ngay ---
     with st.expander(t["addr_search"], expanded=True):
-        aq1, aq2 = st.columns([3, 1])
-        addr_query = aq1.text_input(t["addr_query"], key="addr_query",
-                                    label_visibility="collapsed")
-        if aq2.button(t["addr_find"], width="stretch"):
-            st.session_state.addr_suggestions = cached_suggest(addr_query, country)
-            if not st.session_state.addr_suggestions:
-                st.warning(t["addr_none"])
-        if st.session_state.addr_suggestions:
-            opts = [s["display_name"] for s in st.session_state.addr_suggestions]
-            picked = st.selectbox(t["addr_pick"], opts, key="addr_pick")
-            if st.button(t["addr_add"], type="primary"):
-                big = 1000
-                new = pd.DataFrame(
-                    [[picked, 1, 0, big, 10]], columns=ADDR_COLS)
-                st.session_state.addr_df = pd.concat(
-                    [st.session_state.addr_df, new], ignore_index=True)
-                st.session_state.addr_suggestions = []
-                st.rerun()
+        addr_query = st.text_input(t["addr_query"], key="addr_query")
+        if addr_query and len(addr_query.strip()) >= 4:
+            sugg = cached_suggest(addr_query, country)
+            if sugg:
+                picked = st.selectbox(t["addr_pick"],
+                                      [s["display_name"] for s in sugg],
+                                      key="addr_pick")
+                if st.button(t["addr_add"], type="primary"):
+                    new = pd.DataFrame(
+                        [[picked, DEF_DEMAND, DEF_READY, DEF_DUE, DEF_SERVICE]],
+                        columns=ADDR_COLS)
+                    st.session_state.addr_df = pd.concat(
+                        [st.session_state.addr_df, new], ignore_index=True)
+                    st.rerun()
+            else:
+                st.caption(t["addr_none"])
 
     st.markdown(f"**{t['addr_col']}** + demand / ready / due / service:")
     edited_addr_df = _clock_editor(st.session_state.addr_df)
@@ -529,7 +555,8 @@ if st.button(t["solve"], type="primary", width="stretch"):
             inst = VRPTWInstance(
                 name="user_addresses",
                 locations=coords,
-                demands=[0] + [int(v) for v in adf["demand"]],
+                demands=[0] + [DEF_DEMAND if _empty(v) else int(v)
+                               for v in adf["demand"]],
                 time_windows=([(0, big)]
                               + [(int(r), int(d)) for r, d in
                                  zip(adf["ready_time"], adf["due_time"])]),

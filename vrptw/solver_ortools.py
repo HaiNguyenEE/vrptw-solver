@@ -53,15 +53,26 @@ def solve(inst: VRPTWInstance, time_limit_s: int = 10) -> Solution:
     routing.AddDimension(time_idx, horizon, horizon, False, "Time")
     time_dim = routing.GetDimensionOrDie("Time")
 
-    for node, (a, b) in enumerate(inst.time_windows):
-        if node == inst.depot:
-            continue
-        time_dim.CumulVar(manager.NodeToIndex(node)).SetRange(a * SCALE, b * SCALE)
-    a0, b0 = inst.time_windows[inst.depot]
-    for v in range(inst.num_vehicles):
-        time_dim.CumulVar(routing.Start(v)).SetRange(a0 * SCALE, b0 * SCALE)
-        routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.Start(v)))
-        routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.End(v)))
+    try:
+        for node, (a, b) in enumerate(inst.time_windows):
+            if node == inst.depot:
+                continue
+            lo, hi = int(round(a * SCALE)), int(round(b * SCALE))
+            if lo > hi:                      # khung giờ vô lý (a > b) → vô nghiệm
+                return Solution(inst, [], solver="ortools",
+                                status=f"INFEASIBLE: khung giờ node {node} không hợp lệ "
+                                       f"[{a:.0f}, {b:.0f}]", runtime_s=0.0)
+            hi = min(hi, horizon)
+            time_dim.CumulVar(manager.NodeToIndex(node)).SetRange(lo, hi)
+        a0, b0 = inst.time_windows[inst.depot]
+        for v in range(inst.num_vehicles):
+            time_dim.CumulVar(routing.Start(v)).SetRange(
+                int(round(a0 * SCALE)), min(int(round(b0 * SCALE)), horizon))
+            routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.Start(v)))
+            routing.AddVariableMinimizedByFinalizer(time_dim.CumulVar(routing.End(v)))
+    except Exception as exc:  # OR-Tools phát hiện vô nghiệm ngay khi đặt khung giờ
+        return Solution(inst, [], solver="ortools",
+                        status=f"INFEASIBLE: {exc}", runtime_s=0.0)
 
     # ---- Tham số tìm kiếm -------------------------------------------------
     params = pywrapcp.DefaultRoutingSearchParameters()

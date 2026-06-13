@@ -400,8 +400,8 @@ def cached_osrm_table(coords_tuple, unit):
 
 
 # Giá trị mặc định cho ô bỏ trống ở hàng mới / defaults for blank cells
-DEF_READY = 0.0       # phút kể từ đầu ca
-DEF_DUE = 1000.0      # khung giờ rộng (≈ cả ngày)
+DEF_READY = 0.0       # phút kể từ đầu ca (= giờ bắt đầu ca)
+DEF_DUE = 480.0       # khung giờ rộng 8 tiếng (không cuộn qua nửa đêm)
 DEF_SERVICE = 10.0    # phút phục vụ
 DEF_DEMAND = 1
 
@@ -594,11 +594,16 @@ if st.button(t["solve"], type="primary", width="stretch"):
 
     solve_fn = (solver_ortools.solve if solver_name.startswith("OR-Tools")
                 else solver_milp.solve)
-    with st.spinner(t["solving"]):
-        sol = solve_fn(inst, time_limit_s=int(time_limit))
+    try:
+        with st.spinner(t["solving"]):
+            sol = solve_fn(inst, time_limit_s=int(time_limit))
+    except Exception as exc:
+        st.error(t["no_solution"] + f"\n\n({exc})")
+        st.stop()
 
     if not sol.routes:
-        st.error(t["no_solution"])
+        st.error(t["no_solution"]
+                 + (f"\n\n{sol.status}" if sol.status else ""))
         st.stop()
 
     # ---- Kết quả / results ---------------------------------------------------

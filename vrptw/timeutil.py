@@ -34,8 +34,9 @@ def clock_to_minutes(value: str | float | int) -> float:
 
 
 def minutes_to_clock(minutes: float) -> str:
-    """Phút kể từ 00:00 → 'HH:MM' (24h). Cuộn vòng nếu vượt quá 1 ngày."""
-    total = int(round(minutes)) % (24 * 60)
+    """Phút kể từ 00:00 → 'HH:MM'. KHÔNG cuộn vòng (giữ round-trip chính xác);
+    nếu qua nửa đêm sẽ hiện giờ ≥ 24 (vd '25:40') để đọc lại không bị sai."""
+    total = max(0, int(round(minutes)))
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
